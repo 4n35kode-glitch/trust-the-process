@@ -356,7 +356,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
               <div><b>À retravailler en profondeur.</b> Après 3 mauvais résultats d'affilée sur un chapitre, il sort de la sélection automatique (marqué en rouge) plutôt que de revenir mécaniquement chaque jour — à toi de le retravailler et de le reloguer manuellement depuis Matières.</div>
               <div><b>% de maîtrise.</b> QCM pondéré (45%), dernier ressenti (25%), avancement de l'intervalle (30%). Le bleu (consolidé) est réservé aux chapitres vraiment aboutis.</div>
               <div><b>XP &amp; rang.</b> L'XP récompense l'efficacité (bon % en peu de temps). Le rang suit ta moyenne glissante des 14 derniers jours : il peut monter comme redescendre.</div>
-              <div><b>Classement estimé.</b> Une estimation personnelle basée uniquement sur tes propres indicateurs (maîtrise pondérée, QCM, régularité) projetée sur ta cohorte de ~1700 étudiants. Ce n'est pas une donnée officielle de la fac, juste un repère motivant.</div>
+              <div><b>Classement estimé.</b> Ton score composite (maîtrise pondérée, QCM, régularité, dernier concours blanc s'il existe) est converti en Z-score par rapport à une cohorte supposée suivre une loi normale (μ/σ réglables dans Paramètres), puis en rang via la fonction de répartition normale : plus tu montes, plus chaque progression rapproche de moins en moins vite de la 1ère place. Tout en haut de la courbe (au-delà d'un certain Z-score), l'estimation devient une fourchette plutôt qu'un rang exact, pour éviter une fausse précision. Ce n'est pas une donnée officielle de la fac, juste un repère motivant basé sur des hypothèses de départ.</div>
               <div><b>Date cible.</b> Fixée automatiquement ~2,5 semaines avant le concours (J-18). La dernière semaine passe en révision légère.</div>
             </div>
           </div>
@@ -998,17 +998,44 @@ function computeStreak(){
   }
   return streak;
 }
+function erf(x){
+  const sign = x<0?-1:1; x=Math.abs(x);
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const t=1/(1+p*x);
+  const y=1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return sign*y;
+}
+function normalCDF(z){ return 0.5*(1+erf(z/Math.SQRT2)); }
+function classementRangeLabel(topPct){
+  if(topPct<0.5) return 'top < 0,5%';
+  if(topPct<1) return 'top 0,5-1%';
+  if(topPct<2) return 'top 1-2%';
+  if(topPct<3) return 'top 2-3%';
+  if(topPct<5) return 'top 3-5%';
+  return `top ${Math.round(topPct)}%`;
+}
 function computeClassementEstimate(){
   const wm = weightedMasteryAvg();
   if(wm==null) return null;
   const wq = weightedQcmAvgPct();
   const wqPct = wq!=null ? wq : wm;
   const rolling = clamp((state.progress&&state.progress.rollingPct)||0,0,100);
-  const composite = clamp(0.45*wm + 0.35*wqPct + 0.20*rolling, 0, 100);
-  const frac = 1/(1+Math.exp((composite-62)/9));
-  const estRank = Math.max(1, Math.min(COHORT_SIZE, Math.round(frac*COHORT_SIZE)));
-  const topPct = Math.max(0.1, Math.round(frac*1000)/10);
-  return {composite:Math.round(composite), estRank, topPct};
+  const latestMock = (state.mockExams && state.mockExams.length) ? state.mockExams[0] : null;
+  let composite;
+  if(latestMock && latestMock.qcmAvg!=null){
+    const mockPct = (latestMock.qcmAvg/20)*100;
+    composite = clamp(0.30*wm + 0.20*wqPct + 0.15*rolling + 0.35*mockPct, 0, 100);
+  } else {
+    composite = clamp(0.45*wm + 0.35*wqPct + 0.20*rolling, 0, 100);
+  }
+  const mu = (state.config && state.config.cohortMu!=null) ? state.config.cohortMu : 58;
+  const sigma = (state.config && state.config.cohortSigma!=null) ? state.config.cohortSigma : 14;
+  const z = (composite - mu)/sigma;
+  const topFraction = clamp(1 - normalCDF(z), 0.0002, 0.999);
+  const estRank = Math.max(1, Math.min(COHORT_SIZE, Math.round(topFraction*COHORT_SIZE)));
+  const topPct = Math.max(0.05, Math.round(topFraction*1000)/10);
+  const uncertain = z >= 3;
+  return {composite:Math.round(composite), estRank, topPct, z:Math.round(z*100)/100, uncertain, rangeLabel: uncertain?classementRangeLabel(topPct):null};
 }
 async function recordProgressSnapshot(){
   const today = todayStr();
@@ -1096,7 +1123,7 @@ async function saveConfig(){
   await setDoc(doc(fs,'users',currentUid,'config','main'), state.config);
 }
 function defaultConfig(){
-  return { examDate:'2026-11-30', startedAt: todayStr(), subjects: DEFAULT_SUBJECTS.map(s=>({...s, coef:1})) };
+  return { examDate:'2026-11-30', startedAt: todayStr(), subjects: DEFAULT_SUBJECTS.map(s=>({...s, coef:1})), cohortMu:58, cohortSigma:14 };
 }
 async function loadAll(){
   const cfgSnap = await getDoc(doc(fs,'users',currentUid,'config','main'));
@@ -1197,6 +1224,9 @@ function renderHero(){
   const est = computeClassementEstimate();
   if(!est){
     box.innerHTML = `<span style="color:var(--ink-muted)">Classement estimé : ajoute des chapitres et logge des sessions pour débloquer l'estimation.</span>`;
+  } else if(est.uncertain){
+    box.innerHTML = `Classement estimé : <span class="num">${est.rangeLabel}</span>
+      <div class="disclaimer">Zone haute de la cohorte : fourchette plutôt qu'un rang exact, la précision y est moins fiable. Estimation basée sur des hypothèses initiales (μ/σ, réglables dans Paramètres), à affiner — pas une donnée officielle de la fac.</div>`;
   } else {
     let deltaHtml = '';
     const hist = (state.progress && state.progress.history) || [];
@@ -1208,7 +1238,7 @@ function renderHero(){
       else deltaHtml = `<span class="delta">= stable / 7j</span>`;
     }
     box.innerHTML = `Classement estimé : <span class="num">≈ ${est.estRank}<sup>e</sup> / ${COHORT_SIZE}</span> (top ${est.topPct}%) ${deltaHtml}
-      <div class="disclaimer">Estimation perso basée sur tes indicateurs — pas une donnée officielle de la fac.</div>`;
+      <div class="disclaimer">Estimation basée sur des hypothèses initiales (μ/σ, réglables dans Paramètres), à affiner — pas une donnée officielle de la fac.</div>`;
   }
 }
 
@@ -1332,6 +1362,20 @@ function renderSettings(){
   examRow.innerHTML = `<label>Date du concours</label><input type="date" id="examDateInput" value="${state.config.examDate}">`;
   examRow.querySelector('input').onchange = async (e)=>{ state.config.examDate = e.target.value; await saveConfig(); render(); };
   panel.appendChild(examRow);
+  const muRow = document.createElement('div');
+  muRow.className = 'settings-row';
+  muRow.innerHTML = `<label>Moyenne cohorte (μ) — classement</label><input type="number" step="1" value="${state.config.cohortMu!=null?state.config.cohortMu:58}">`;
+  muRow.querySelector('input').onchange = async (e)=>{ state.config.cohortMu = Number(e.target.value)||58; await saveConfig(); render(); };
+  panel.appendChild(muRow);
+  const sigmaRow = document.createElement('div');
+  sigmaRow.className = 'settings-row';
+  sigmaRow.innerHTML = `<label>Écart-type cohorte (σ) — classement</label><input type="number" step="1" min="1" value="${state.config.cohortSigma!=null?state.config.cohortSigma:14}">`;
+  sigmaRow.querySelector('input').onchange = async (e)=>{ state.config.cohortSigma = Math.max(1,Number(e.target.value)||14); await saveConfig(); render(); };
+  panel.appendChild(sigmaRow);
+  const muNote = document.createElement('div');
+  muNote.className = 'settings-note';
+  muNote.textContent = "μ et σ sont des hypothèses de départ sur la distribution de ta cohorte, à ajuster si tu obtiens un jour de vraies données (concours blanc officiel, stats de la fac...).";
+  panel.appendChild(muNote);
   const themeRow = document.createElement('div');
   themeRow.className = 'settings-row';
   themeRow.innerHTML = `<label>Thème</label>`;
