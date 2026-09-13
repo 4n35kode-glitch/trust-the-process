@@ -317,8 +317,10 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
           <div class="panel">
             <div class="panel-head"><h2>Comment ça marche</h2></div>
             <div class="help-list">
-              <div><b>Répétition espacée.</b> Chaque chapitre suit la cadence J+1 / J+3 / J+7 / J+14 / J+30 / J+60. Un bon ressenti + QCM fait avancer plus vite (voire sauter une étape), un chapitre fragile revient plus tôt. Rien n'est jamais laissé à l'abandon.</div>
-              <div><b>% de maîtrise.</b> Mélange ta moyenne QCM pondérée, ton dernier ressenti et ton avancement dans la cadence. Le bleu (consolidé) est réservé aux chapitres vraiment aboutis.</div>
+              <div><b>Répétition espacée adaptative.</b> Un chapitre neuf est introduit avec un rappel à J+1, puis chaque vraie session (ressenti + QCM) ajuste son propre facteur de facilité façon SM-2/Anki : bon résultat, l'intervalle suivant est multiplié par 2 à 2,5 ; moyen, par 1,3 à 1,5 ; mauvais, il retombe presque à zéro. Pas de grille figée : chaque chapitre trouve son rythme.</div>
+              <div><b>Priorité du jour.</b> Score = (jours de retard + 1) × coefficient de la matière × (1 − 0,9 × % de maîtrise). Le coefficient pondère, il ne filtre jamais complètement : une matière sans chapitre depuis 4 jours est forcée dans le planning, et jamais deux chapitres de la même matière le même jour. Les nouveaux chapitres sont introduits en rotation pondérée entre matières (1 à 3 par jour selon le nombre en attente).</div>
+              <div><b>À retravailler en profondeur.</b> Après 3 mauvais résultats d'affilée sur un chapitre, il sort de la sélection automatique (marqué en rouge) plutôt que de revenir mécaniquement chaque jour — à toi de le retravailler et de le reloguer manuellement depuis Matières.</div>
+              <div><b>% de maîtrise.</b> QCM pondéré (45%), dernier ressenti (25%), avancement de l'intervalle (30%). Le bleu (consolidé) est réservé aux chapitres vraiment aboutis.</div>
               <div><b>XP &amp; rang.</b> L'XP récompense l'efficacité (bon % en peu de temps). Le rang suit ta moyenne glissante des 14 derniers jours : il peut monter comme redescendre.</div>
               <div><b>Classement estimé.</b> Une estimation personnelle basée uniquement sur tes propres indicateurs (maîtrise pondérée, QCM, régularité) projetée sur ta cohorte de ~1700 étudiants. Ce n'est pas une donnée officielle de la fac, juste un repère motivant.</div>
               <div><b>Date cible.</b> Fixée automatiquement ~2,5 semaines avant le concours (J-18). La dernière semaine passe en révision légère.</div>
@@ -404,7 +406,14 @@ const auth = getAuth(fbApp);
 const fs = getFirestore(fbApp);
 let currentUid = null;
 
-const SEQ = [1,3,7,14,30,60];
+const EASE_DEFAULT = 2.3;
+const EASE_MIN = 1.3;
+const EASE_MAX = 3.2;
+const INTRO_PLACEHOLDER_DAYS = 1;
+const FAIRNESS_WINDOW_DAYS = 4;
+const STRUGGLING_THRESHOLD = 3;
+const BASE_NEW_PER_DAY = 1;
+const MAX_NEW_PER_DAY = 3;
 const RANKS = ["F","D-","D","D+","C-","C","C+","B-","B","B+","A-","A","A+","S-","S","S+","SS-","SS","SS+","SSS"];
 const RANK_THRESH = [0,5,11,18,25,32,39,46,53,60,67,74,81,88,95,102,109,116,123,131];
 const TARGET_DAILY_POINTS = 80;
@@ -446,19 +455,20 @@ function computeMastery(ch){
   const qcmAvg = computeQcmAvgFromArray(ch.qcms);
   const feelings = (ch.revisions||[]).map(r=>r.feeling).filter(f=>f!=null);
   const latestFeeling = feelings.length ? feelings[feelings.length-1] : null;
-  const idx = (ch.srs && ch.srs.intervalIndex != null) ? ch.srs.intervalIndex : -1;
-  const repProgress = idx<0 ? 0 : Math.min(1,(idx+1)/SEQ.length);
+  const intervalDays = (ch.srs && ch.srs.intervalDays) ? ch.srs.intervalDays : 0;
+  const repProgress = clamp(intervalDays/60, 0, 1);
   let mastery;
   if(qcmAvg==null && latestFeeling==null) mastery = 0;
   else if(qcmAvg==null) mastery = (((latestFeeling-1)/4)*0.5 + repProgress*0.5)*100;
-  else mastery = ((qcmAvg/20)*0.4 + ((latestFeeling-1)/4)*0.3 + repProgress*0.3)*100;
+  else mastery = ((qcmAvg/20)*0.45 + ((latestFeeling-1)/4)*0.25 + repProgress*0.30)*100;
   return Math.round(clamp(mastery,0,100));
 }
 function masteryLevel(ch){
   const m = computeMastery(ch);
   const qcmAvg = computeQcmAvgFromArray(ch.qcms);
-  const idx = (ch.srs && ch.srs.intervalIndex != null) ? ch.srs.intervalIndex : -1;
-  const consolidated = m>=95 && idx>=SEQ.length-1 && qcmAvg!=null && qcmAvg>=18;
+  const intervalDays = (ch.srs && ch.srs.intervalDays) ? ch.srs.intervalDays : 0;
+  if(ch.srs && ch.srs.struggling) return {level:'red', pct:m, label:'À retravailler en profondeur'};
+  const consolidated = m>=95 && intervalDays>=45 && qcmAvg!=null && qcmAvg>=18;
   if(consolidated) return {level:'blue', pct:100, label:'Consolidé'};
   if(m<25) return {level:'red', pct:m, label:'Pas maîtrisé'};
   if(m<50) return {level:'orange', pct:m, label:'Faible'};
@@ -488,49 +498,149 @@ function getPeriodMode(dateStr){
   if(dateStr > targetDate) return {mode:'consolidation', examDate, targetDate, lightStart};
   return {mode:'learning', examDate, targetDate, lightStart};
 }
+function isDue(ch, dateStr){
+  return !!(ch.srs && ch.srs.nextDueDate && ch.srs.nextDueDate<=dateStr && !ch.srs.struggling);
+}
 function priorityScore(ch, dateStr){
   const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
   const coef = subj ? subj.coef : 1;
-  const overdue = (ch.srs && ch.srs.nextDueDate) ? dayDiff(ch.srs.nextDueDate, dateStr) : 999;
+  const daysOverdue = Math.max(0, dayDiff(ch.srs.nextDueDate, dateStr));
   const mastery = computeMastery(ch);
-  const createdRank = ch.createdAt ? -Date.parse(ch.createdAt) : 0;
-  return overdue*3 + (100-mastery)*1 + coef*8 + createdRank*1e-14;
+  const masteryFactor = 1 - 0.9*(mastery/100);
+  return (daysOverdue+1) * coef * masteryFactor;
 }
 function loggedToday(ch, dateStr){ return (ch.revisions||[]).some(r=>r.date===dateStr); }
-function pickDueOrNew(dateStr, count){
-  const candidates = state.chapters.filter(c=>!c.archived && !loggedToday(c,dateStr));
-  candidates.sort((a,b)=>priorityScore(b,dateStr)-priorityScore(a,dateStr));
-  return candidates.slice(0,count);
+function computeNewPerDayLimit(){
+  const pending = state.chapters.filter(c=>!c.archived && !c.srs).length;
+  if(pending > 12) return MAX_NEW_PER_DAY;
+  if(pending > 6) return Math.min(2, MAX_NEW_PER_DAY);
+  return BASE_NEW_PER_DAY;
 }
-function pickConsolidation(dateStr, count, avoidNew){
-  let candidates = state.chapters.filter(c=>!c.archived && !loggedToday(c,dateStr));
-  if(avoidNew) candidates = candidates.filter(c=> (c.revisions||[]).length>0);
-  candidates.sort((a,b)=>{
-    const ma=computeMastery(a), mb=computeMastery(b);
-    if(ma!==mb) return ma-mb;
-    const qa=computeQcmAvgFromArray(a.qcms)??20, qb=computeQcmAvgFromArray(b.qcms)??20;
-    if(qa!==qb) return qa-qb;
-    return priorityScore(b,dateStr)-priorityScore(a,dateStr);
-  });
-  return candidates.slice(0,count);
+function pickIntroductionCandidates(dateStr, maxCount, excludeIds){
+  if(maxCount<=0) return [];
+  const bySubject = state.config.subjects
+    .map(s=>{
+      const newChs = state.chapters.filter(c=>c.subjectId===s.id && !c.archived && !c.srs && !excludeIds.has(c.id));
+      const introducedCount = state.chapters.filter(c=>c.subjectId===s.id && c.srs && c.srs.introducedAt).length;
+      return {subj:s, newChs, deficit: s.coef - introducedCount};
+    })
+    .filter(x=>x.newChs.length>0)
+    .sort((a,b)=> b.deficit-a.deficit || b.subj.coef-a.subj.coef);
+  const picks = [];
+  for(const entry of bySubject){
+    if(picks.length>=maxCount) break;
+    const next = entry.newChs.sort((a,b)=>Date.parse(a.createdAt)-Date.parse(b.createdAt))[0];
+    picks.push(next);
+  }
+  return picks;
 }
-function buildPlan(dateStr){
+function subjectLastPlannedDate(subjectId, beforeDateStr){
+  let best = null;
+  for(const d of Object.keys(state.daily)){
+    if(d>=beforeDateStr) continue;
+    const doc = state.daily[d];
+    if(!doc || !doc.plannedChapterIds) continue;
+    const hit = doc.plannedChapterIds.some(id=>{
+      const ch = state.chapters.find(c=>c.id===id);
+      return ch && ch.subjectId===subjectId;
+    });
+    if(hit && (!best || d>best)) best = d;
+  }
+  return best;
+}
+function getStaleSubjectIds(dateStr){
+  const result = [];
+  for(const s of state.config.subjects){
+    if(!subjectChapters(s.id).length) continue;
+    const lastDate = subjectLastPlannedDate(s.id, dateStr);
+    const daysSince = lastDate ? dayDiff(lastDate, dateStr) : 999;
+    if(daysSince >= FAIRNESS_WINDOW_DAYS) result.push({id:s.id, daysSince});
+  }
+  result.sort((a,b)=>b.daysSince-a.daysSince);
+  return result.map(r=>r.id);
+}
+function buildPlan(dateStr, excludeIds){
+  excludeIds = excludeIds || new Set();
   const period = getPeriodMode(dateStr);
   if(period.mode==='post') return {items:[], note:"Le concours est passé (ou c'est aujourd'hui) — bon courage !", period};
   if(!state.chapters.length) return {items:[], note:null, period};
-  if(period.mode==='light'){
-    return {items: pickConsolidation(dateStr,2,true), note:'Semaine de révision légère avant le concours : pas de nouveau contenu, on consolide.', period};
+  const slotCount = isWeekend(dateStr) && period.mode!=='light' ? 3 : 2;
+  const isLight = period.mode==='light';
+
+  const dueCandidates = state.chapters.filter(c=>!c.archived && !loggedToday(c,dateStr) && !excludeIds.has(c.id) && isDue(c,dateStr));
+  const newLimit = isLight ? 0 : computeNewPerDayLimit();
+  const introCandidates = pickIntroductionCandidates(dateStr, newLimit, excludeIds);
+
+  const pool = [];
+  for(const ch of dueCandidates) pool.push({ch, score:priorityScore(ch,dateStr)});
+  for(const ch of introCandidates){
+    const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
+    pool.push({ch, score:(subj?subj.coef:1)});
   }
-  if(isWeekend(dateStr)){
-    return {items: pickConsolidation(dateStr,3,false), note:'Session de consolidation du week-end.', period};
+  pool.sort((a,b)=>b.score-a.score);
+
+  const chosen = [];
+  const chosenSubjects = new Set();
+  const staleIds = getStaleSubjectIds(dateStr);
+  for(const subjId of staleIds){
+    if(chosen.length>=slotCount) break;
+    if(chosenSubjects.has(subjId)) continue;
+    const entry = pool.find(p=>p.ch.subjectId===subjId && !chosen.some(c=>c.id===p.ch.id));
+    if(entry){ chosen.push(entry.ch); chosenSubjects.add(subjId); }
   }
-  return {items: pickDueOrNew(dateStr,2), note: period.mode==='consolidation' ? 'Phase de consolidation (après ta date cible).' : null, period};
+  for(const p of pool){
+    if(chosen.length>=slotCount) break;
+    if(chosenSubjects.has(p.ch.subjectId)) continue;
+    if(chosen.some(c=>c.id===p.ch.id)) continue;
+    chosen.push(p.ch); chosenSubjects.add(p.ch.subjectId);
+  }
+  if(chosen.length<slotCount){
+    for(const p of pool){
+      if(chosen.length>=slotCount) break;
+      if(chosen.some(c=>c.id===p.ch.id)) continue;
+      chosen.push(p.ch);
+    }
+  }
+
+  let note = null;
+  if(isLight) note = 'Semaine de révision légère avant le concours : pas de nouveau contenu, on consolide.';
+  else if(isWeekend(dateStr)) note = 'Session de consolidation du week-end.';
+  else if(period.mode==='consolidation') note = 'Phase de consolidation (après ta date cible).';
+  return {items: chosen, note, period};
 }
 function computeSessionXp(masteryPctAfter, hours){
   const idealHours = Math.max(0.15, 0.02*masteryPctAfter);
   const ratio = clamp(idealHours/Math.max(hours,0.1), 0.15, 2.2);
   let xp = Math.round(masteryPctAfter*ratio*0.6);
   return clamp(xp,2,80);
+}
+function qualityTier(solidity){
+  if(solidity < 0.35) return 'bad';
+  if(solidity < 0.7) return 'medium';
+  return 'good';
+}
+function applySessionToSrs(ch, date, solidity){
+  const srs = ch.srs || {ease:EASE_DEFAULT, intervalDays:null, nextDueDate:null, lastReviewedAt:null, introducedAt:date, consecutiveBad:0, struggling:false};
+  const tier = qualityTier(solidity);
+  const prevInterval = srs.intervalDays || 1;
+  if(tier==='bad'){
+    srs.intervalDays = 1;
+    srs.ease = clamp(srs.ease - 0.25, EASE_MIN, EASE_MAX);
+    srs.consecutiveBad = (srs.consecutiveBad||0) + 1;
+    if(srs.consecutiveBad >= STRUGGLING_THRESHOLD){ srs.struggling = true; }
+  } else {
+    let base;
+    if(tier==='good') base = 2.0 + clamp((solidity-0.7)/0.3,0,1)*0.5;
+    else base = 1.3 + clamp((solidity-0.35)/0.35,0,1)*0.2;
+    const mult = base * (srs.ease/EASE_DEFAULT);
+    srs.intervalDays = clamp(Math.round(prevInterval*mult), 1, 180);
+    if(tier==='good') srs.ease = clamp(srs.ease + 0.15, EASE_MIN, EASE_MAX);
+    srs.consecutiveBad = 0;
+    srs.struggling = false;
+  }
+  srs.lastReviewedAt = date;
+  srs.nextDueDate = addDays(date, srs.intervalDays);
+  ch.srs = srs;
 }
 
 async function getDailyDoc(dateStr){
@@ -554,6 +664,12 @@ async function ensurePlanPersisted(dateStr, plan){
   doc.loggedChapterIds = doc.loggedChapterIds || [];
   doc.sessionXpSum = doc.sessionXpSum || 0;
   await setDailyDoc(dateStr, doc);
+  for(const ch of plan.items){
+    if(!ch.srs){
+      ch.srs = {ease:EASE_DEFAULT, intervalDays:null, nextDueDate:addDays(dateStr,INTRO_PLACEHOLDER_DAYS), lastReviewedAt:null, introducedAt:dateStr, consecutiveBad:0, struggling:false};
+      await saveChapter(ch);
+    }
+  }
   return doc;
 }
 async function settleDailyAdherence(){
@@ -642,14 +758,9 @@ async function logSession(chapterId, {date, hours, feeling, qcmCorrect, qcmTotal
     ch.qcms.push({date, correct:Number(qcmCorrect)||0, total:Number(qcmTotal)});
   }
   const qcmAvg = computeQcmAvgFromArray(ch.qcms);
-  const solidity = qcmAvg!=null ? (0.5*((feeling-1)/4) + 0.5*(qcmAvg/20)) : ((feeling-1)/4);
-  let idx = (ch.srs && ch.srs.intervalIndex!=null) ? ch.srs.intervalIndex : -1;
-  if(idx===-1) idx = 0;
-  else if(solidity<0.4) idx = Math.max(0, idx-1);
-  else if(solidity>0.85) idx = Math.min(SEQ.length-1, idx+2);
-  else idx = Math.min(SEQ.length-1, idx+1);
-  const intervalDays = SEQ[idx];
-  ch.srs = {lastReviewedAt:date, nextDueDate: addDays(date,intervalDays), intervalIndex: idx};
+  const feelingNum = Number(feeling);
+  const solidity = qcmAvg!=null ? (0.5*((feelingNum-1)/4) + 0.5*(qcmAvg/20)) : ((feelingNum-1)/4);
+  applySessionToSrs(ch, date, solidity);
   const masteryPct = computeMastery(ch);
   ch.history = ch.history || [];
   ch.history.push({date, masteryPct, qcmAvg});
@@ -975,6 +1086,7 @@ function renderWeek(){
   if(!grid) return;
   grid.innerHTML = '';
   const today = todayStr();
+  const usedInPreview = new Set();
   for(let i=0;i<7;i++){
     const d = addDays(today,i);
     const card = document.createElement('div');
@@ -987,6 +1099,7 @@ function renderWeek(){
       const doc = state.daily[d];
       const ids = doc && doc.plannedChapterIds && doc.plannedChapterIds.length ? doc.plannedChapterIds : plan.items.map(c=>c.id);
       const items = ids.map(id=>state.chapters.find(c=>c.id===id)).filter(Boolean);
+      items.forEach(ch=>usedInPreview.add(ch.id));
       chipsHtml = items.map(ch=>`<span class="day-chip ${loggedToday(ch,d)?'done':''}">${escapeHtml(ch.name)}</span>`).join('') || '<span class="day-status">rien de planifié</span>';
     } else if(d < today){
       const doc = state.daily[d];
@@ -994,7 +1107,8 @@ function renderWeek(){
         chipsHtml = `<span class="day-status">${(doc.loggedChapterIds||[]).length}/${doc.plannedChapterIds.length} fait${(doc.loggedChapterIds||[]).length>1?'s':''}</span>`;
       } else { chipsHtml = '<span class="day-status">pas de session</span>'; }
     } else {
-      const plan = buildPlan(d);
+      const plan = buildPlan(d, usedInPreview);
+      plan.items.forEach(ch=>usedInPreview.add(ch.id));
       chipsHtml = plan.items.length
         ? plan.items.map(ch=>`<span class="day-chip">${escapeHtml(ch.name)}</span>`).join('') + '<span class="day-status" style="margin-left:6px">aperçu</span>'
         : '<span class="day-status">aperçu — rien pour l\'instant</span>';
