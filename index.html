@@ -67,6 +67,9 @@ a{color:var(--accent)}
 .nav-btn.active{color:var(--accent-ink);background:var(--accent);box-shadow:0 0 16px var(--accent-glow)}
 .sidenav .spacer{flex:1}
 .theme-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--ink);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;width:100%}
+.icon-btn{border:1px solid var(--border);background:var(--surface);color:var(--ink-muted);border-radius:7px;padding:6px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.icon-btn:hover{border-color:var(--red);color:var(--red)}
+.icon-btn svg{width:15px;height:15px}
 
 .pages{flex:1;min-width:0;display:flex;flex-direction:column}
 .topbar-mobile{display:none;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
@@ -383,7 +386,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAV13eT4QFuGXF5adVi4HQGWFQpar7n_iY",
@@ -706,6 +709,24 @@ window.addEventListener('hashchange', ()=>{ const p=location.hash.replace('#',''
 const THEME_KEY = 'rangpass_theme_pref';
 const ICON_MOON = '<svg viewBox="0 0 24 24"><path d="M20 14.2A8 8 0 1 1 9.8 4a6.4 6.4 0 0 0 10.2 10.2z" fill="currentColor"/></svg>';
 const ICON_SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.2 2.2M16.8 16.8 19 19M19 5l-2.2 2.2M7.2 16.8 5 19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+async function removeSubject(subjectId){
+  const subj = state.config.subjects.find(s=>s.id===subjectId);
+  if(!subj) return;
+  const chs = subjectChapters(subjectId);
+  const msg = chs.length
+    ? `Supprimer "${subj.name}" et ses ${chs.length} chapitre${chs.length>1?'s':''} ? Cette action est définitive.`
+    : `Supprimer la matière "${subj.name}" ?`;
+  if(!window.confirm(msg)) return;
+  for(const ch of chs){
+    await deleteDoc(doc(fs,'users',currentUid,'chapters',ch.id));
+  }
+  state.chapters = state.chapters.filter(c=>c.subjectId!==subjectId);
+  state.config.subjects = state.config.subjects.filter(s=>s.id!==subjectId);
+  if(state.selectedSubject===subjectId) state.selectedSubject=null;
+  await saveConfig();
+  render();
+}
 function applyThemePref(pref){
   const app = document.getElementById('app');
   if(pref) app.setAttribute('data-app-theme', pref); else app.removeAttribute('data-app-theme');
@@ -890,8 +911,20 @@ function renderSettings(){
   for(const subj of state.config.subjects){
     const row = document.createElement('div');
     row.className = 'settings-row';
-    row.innerHTML = `<label>${escapeHtml(subj.name)}</label><input type="number" min="0" step="0.5" value="${subj.coef}">`;
-    row.querySelector('input').onchange = async (e)=>{ subj.coef = Number(e.target.value)||1; await saveConfig(); render(); };
+    row.innerHTML = `<label>${escapeHtml(subj.name)}</label>`;
+    const right = document.createElement('div');
+    right.style.display = 'flex'; right.style.alignItems = 'center'; right.style.gap = '8px';
+    const coefInput = document.createElement('input');
+    coefInput.type = 'number'; coefInput.min = '0'; coefInput.step = '0.5'; coefInput.value = subj.coef;
+    coefInput.onchange = async (e)=>{ subj.coef = Number(e.target.value)||1; await saveConfig(); render(); };
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn';
+    delBtn.title = 'Supprimer cette matière';
+    delBtn.innerHTML = ICON_TRASH;
+    delBtn.onclick = ()=>removeSubject(subj.id);
+    right.appendChild(coefInput);
+    right.appendChild(delBtn);
+    row.appendChild(right);
     panel.appendChild(row);
   }
   const note = document.createElement('div');
