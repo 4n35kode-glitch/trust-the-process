@@ -294,6 +294,11 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
             <div id="pacePanel"></div>
           </div>
 
+          <div class="panel">
+            <div class="panel-head"><h2>Objectif de la semaine</h2></div>
+            <div id="goalPanel"></div>
+          </div>
+
           <div class="grid2">
             <div class="panel">
               <div class="panel-head"><h2 id="planTitle">Aujourd'hui</h2></div>
@@ -323,6 +328,10 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
             <div class="panel-head"><h2>Matières</h2></div>
             <div class="subject-grid" id="subjectGrid"></div>
             <div class="subject-detail" id="subjectDetail" hidden></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Chapitres orphelins <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--ink-muted)">— audit global, toutes matières</span></h2></div>
+            <div id="orphanPanel"></div>
           </div>
         </section>
 
@@ -532,7 +541,7 @@ function fmtDateShort(dateStr){const d=new Date(dateStr+'T00:00:00');return d.to
 function fmtWeekday(dateStr){const d=new Date(dateStr+'T00:00:00');return d.toLocaleDateString('fr-FR',{weekday:'short'});}
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-const state = { config:null, chapters:[], daily:{}, progress:null, exams:{}, mockExams:[], badges:{unlocked:{}}, selectedSubject:null, currentPage:'accueil', userEmail:null };
+const state = { config:null, chapters:[], daily:{}, progress:null, exams:{}, mockExams:[], badges:{unlocked:{}}, goals:{}, selectedSubject:null, currentPage:'accueil', userEmail:null };
 
 function computeQcmAvgFromArray(qcms){
   if(!qcms || !qcms.length) return null;
@@ -834,6 +843,31 @@ async function logWeeklyExam(weekKey, date, correct, total){
   await recordProgressSnapshot();
 }
 
+function goalDocRef(weekKey){ return doc(fs,'users',currentUid,'weeklyGoals',weekKey); }
+async function loadWeeklyGoals(){
+  const snap = await getDocs(collection(fs,'users',currentUid,'weeklyGoals'));
+  for(const d of snap.docs){ state.goals[d.id] = d.data(); }
+}
+async function getOrCreateWeeklyGoal(dateStr){
+  const wk = weekMonday(dateStr);
+  if(state.goals[wk]) return state.goals[wk];
+  const g = {weekKey:wk, text:'', done:false};
+  state.goals[wk] = g;
+  return g;
+}
+async function saveWeeklyGoal(weekKey, text, done){
+  const g = state.goals[weekKey] || {weekKey};
+  g.text = text; g.done = !!done;
+  await setDoc(goalDocRef(weekKey), g);
+  state.goals[weekKey] = g;
+  await recordProgressSnapshot();
+}
+function getOrphanChapters(){
+  const today = todayStr();
+  return state.chapters
+    .filter(c=>!c.archived && c.srs && c.srs.nextDueDate && dayDiff(c.srs.nextDueDate,today)>=14)
+    .sort((a,b)=> dayDiff(b.srs.nextDueDate,today) - dayDiff(a.srs.nextDueDate,today));
+}
 async function loadMockExams(){
   const snap = await getDocs(collection(fs,'users',currentUid,'mockExams'));
   state.mockExams = snap.docs.map(d=>d.data()).sort((a,b)=> a.date<b.date?1:-1);
@@ -871,10 +905,64 @@ const BADGES = [
   {id:'first_exam', label:'Premier bilan', desc:'Un premier examen hebdomadaire passé.', check: ()=> Object.values(state.exams||{}).some(e=>e.date)},
   {id:'first_mock', label:'Premier concours blanc', desc:'Un premier concours blanc renseigné.', check: ()=> (state.mockExams||[]).length>0},
   {id:'first_feynman', label:'Pédagogue', desc:'Une première explication Feynman loguée.', check: ()=> state.chapters.some(c=>(c.feynman||[]).length>0)},
-  {id:'comeback', label:'Retour en force', desc:'Un chapitre "à retravailler" est redevenu solide.', check: ()=> state.chapters.some(c=>c.srs && c.srs.everStruggled && !c.srs.struggling && masteryLevel(c).level!=='red')},
   {id:'rank_A', label:'Élite', desc:'Atteindre le rang A.', check: ()=> RANKS.indexOf((state.progress&&state.progress.rank)||'F') >= RANKS.indexOf('A')},
   {id:'rank_S', label:'Ascendant', desc:'Atteindre le rang S.', check: ()=> RANKS.indexOf((state.progress&&state.progress.rank)||'F') >= RANKS.indexOf('S')},
   {id:'rank_SSS', label:'Univers', desc:'Atteindre le rang SSS.', check: ()=> ((state.progress&&state.progress.rank)||'F')==='SSS'},
+  {id:'month_no_miss', label:'Mois sans faute', desc:'30 jours de suite sans un seul jour prévu manqué.', check: ()=>{
+    const today=todayStr();
+    for(let i=1;i<=30;i++){
+      const d=addDays(today,-i);
+      const dd=state.daily[d];
+      if(dd && dd.plannedChapterIds && dd.plannedChapterIds.length>0 && (dd.loggedChapterIds||[]).length<dd.plannedChapterIds.length) return false;
+    }
+    return true;
+  }},
+  {id:'goal_streak_3', label:'Objectifs tenus', desc:"L'objectif hebdomadaire libre atteint 3 semaines de suite.", check: ()=>{
+    const wks = Object.keys(state.goals||{}).sort();
+    let streak=0,best=0;
+    for(const wk of wks){ if(state.goals[wk].done){ streak++; best=Math.max(best,streak); } else streak=0; }
+    return best>=3;
+  }},
+  {id:'fast_mastery', label:'Éclair', desc:'Un chapitre à ≥80% de maîtrise en 2h de révision cumulées ou moins.', check: ()=> state.chapters.some(c=>{
+    const totalHours=(c.revisions||[]).reduce((a,r)=>a+(r.hours||0),0);
+    return computeMastery(c)>=80 && totalHours>0 && totalHours<=2;
+  })},
+  {id:'efficient_streak', label:'Trois coups de maître', desc:'3 sessions loguées d\'affilée avec un excellent ressenti.', check: ()=>{
+    const all=[];
+    for(const c of state.chapters) for(const r of (c.revisions||[])) all.push(r);
+    all.sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
+    const last3 = all.slice(-3);
+    return last3.length===3 && last3.every(r=>r.feeling>=4);
+  }},
+  {id:'feynman_5_clear', label:'Pédagogue confirmé', desc:'5 explications Feynman notées ≥4 en clarté.', check: ()=> state.chapters.reduce((a,c)=>a+(c.feynman||[]).filter(f=>f.clarity>=4).length,0) >= 5},
+  {id:'risk_recovered', label:'Sauvetage', desc:'Une matière est sortie de l\'alerte grâce à un rattrapage.', check: ()=> state.config.subjects.some(s=>s.everAtRisk && subjectRiskLevel(s.id)==='ok')},
+  {id:'first_top10', label:'Dans le top 10%', desc:'Ton classement estimé atteint le top 10% de la cohorte.', check: ()=>{ const est=computeClassementEstimate(); return !!(est && est.topPct<=10); }},
+  {id:'best_month_climb', label:'Ascension du mois', desc:'Le classement estimé a gagné au moins 100 places en 30 jours.', check: ()=>{
+    const hist=(state.progress&&state.progress.history)||[];
+    const today=todayStr();
+    const past = hist.filter(h=>h.estRank!=null && dayDiff(h.date,today)>=30).slice(-1)[0];
+    const now = hist.filter(h=>h.estRank!=null).slice(-1)[0];
+    if(!past||!now) return false;
+    return (past.estRank-now.estRank) >= 100;
+  }},
+  {id:'mock_progress', label:'Progrès chronométré', desc:'Ton dernier concours blanc fait mieux que le précédent.', check: ()=>{
+    const list=state.mockExams||[];
+    return list.length>=2 && list[0].qcmAvg>list[1].qcmAvg;
+  }},
+  {id:'weekly_exam_streak_4', label:'Mois de contrôle', desc:'4 examens hebdomadaires consécutifs passés.', check: ()=>{
+    let wk = weekMonday(addDays(todayStr(),-7));
+    for(let i=0;i<4;i++){
+      const e = state.exams[wk];
+      if(!e || !e.date) return false;
+      wk = addDays(wk,-7);
+    }
+    return true;
+  }},
+  {id:'comeback', label:'Retour en force', desc:'Un chapitre "à retravailler" est redevenu solide.', hidden:true, check: ()=> state.chapters.some(c=>c.srs && c.srs.everStruggled && !c.srs.struggling && masteryLevel(c).level!=='red')},
+  {id:'marathon', label:'Marathonien', desc:'Une session unique de 4 heures ou plus.', hidden:true, check: ()=> state.chapters.some(c=>(c.revisions||[]).some(r=>r.hours>=4))},
+  {id:'legendary_ease', label:'Grâce naturelle', desc:'Un chapitre a atteint le facteur de facilité maximum.', hidden:true, check: ()=> state.chapters.some(c=>c.srs && c.srs.ease>=EASE_MAX)},
+  {id:'century_xp', label:'Centurion', desc:'1000 XP cumulés.', hidden:true, check: ()=> ((state.progress&&state.progress.totalXp)||0) >= 1000},
+  {id:'perfect_subject', label:'Sans-faute matière', desc:'Une matière entière avec une moyenne QCM ≥19/20.', hidden:true, check: ()=> state.config.subjects.some(s=>{ const q=subjectQcmAvg(s.id); return q!=null && q>=19; })},
 ];
 async function checkAndUnlockBadges(){
   if(!state.badges) state.badges = {unlocked:{}};
@@ -1037,6 +1125,20 @@ function computeClassementEstimate(){
   const uncertain = z >= 3;
   return {composite:Math.round(composite), estRank, topPct, z:Math.round(z*100)/100, uncertain, rangeLabel: uncertain?classementRangeLabel(topPct):null};
 }
+function getClassementDeltaHtml(est){
+  const hist = (state.progress && state.progress.history) || [];
+  const past = hist.filter(h=>h.estRank!=null && dayDiff(h.date, todayStr())>=7).slice(-1)[0];
+  if(!past || past.estRank==null) return '';
+  const diff = past.estRank - est.estRank;
+  if(est.uncertain){
+    if(diff>0) return `<span class="delta up">▲ progression / 7j</span>`;
+    if(diff<0) return `<span class="delta down">▼ recul / 7j</span>`;
+    return `<span class="delta">= stable / 7j</span>`;
+  }
+  if(diff>0) return `<span class="delta up">▲ +${diff} places / 7j</span>`;
+  if(diff<0) return `<span class="delta down">▼ ${diff} places / 7j</span>`;
+  return `<span class="delta">= stable / 7j</span>`;
+}
 async function recordProgressSnapshot(){
   const today = todayStr();
   const window_ = [];
@@ -1138,6 +1240,7 @@ async function loadAll(){
   const badgesSnap = await getDoc(doc(fs,'users',currentUid,'state','badges'));
   state.badges = badgesSnap.exists() ? badgesSnap.data() : {unlocked:{}};
   await loadMockExams();
+  await loadWeeklyGoals();
   if(!state.config.startedAt){ state.config.startedAt = todayStr(); await saveConfig(); }
   await settleDailyAdherence();
   await recordProgressSnapshot();
@@ -1225,19 +1328,10 @@ function renderHero(){
   if(!est){
     box.innerHTML = `<span style="color:var(--ink-muted)">Classement estimé : ajoute des chapitres et logge des sessions pour débloquer l'estimation.</span>`;
   } else if(est.uncertain){
-    box.innerHTML = `Classement estimé : <span class="num">${est.rangeLabel}</span>
+    box.innerHTML = `Classement estimé : <span class="num">${est.rangeLabel}</span> ${getClassementDeltaHtml(est)}
       <div class="disclaimer">Zone haute de la cohorte : fourchette plutôt qu'un rang exact, la précision y est moins fiable. Estimation basée sur des hypothèses initiales (μ/σ, réglables dans Paramètres), à affiner — pas une donnée officielle de la fac.</div>`;
   } else {
-    let deltaHtml = '';
-    const hist = (state.progress && state.progress.history) || [];
-    const past = hist.filter(h=>h.estRank!=null && dayDiff(h.date, todayStr())>=7).slice(-1)[0];
-    if(past && past.estRank!=null){
-      const diff = past.estRank - est.estRank;
-      if(diff>0) deltaHtml = `<span class="delta up">▲ +${diff} places / 7j</span>`;
-      else if(diff<0) deltaHtml = `<span class="delta down">▼ ${diff} places / 7j</span>`;
-      else deltaHtml = `<span class="delta">= stable / 7j</span>`;
-    }
-    box.innerHTML = `Classement estimé : <span class="num">≈ ${est.estRank}<sup>e</sup> / ${COHORT_SIZE}</span> (top ${est.topPct}%) ${deltaHtml}
+    box.innerHTML = `Classement estimé : <span class="num">≈ ${est.estRank}<sup>e</sup> / ${COHORT_SIZE}</span> (top ${est.topPct}%) ${getClassementDeltaHtml(est)}
       <div class="disclaimer">Estimation basée sur des hypothèses initiales (μ/σ, réglables dans Paramètres), à affiner — pas une donnée officielle de la fac.</div>`;
   }
 }
@@ -1487,7 +1581,13 @@ function renderProgressChart(){
   if(!state.selectedSubject){
     const hist = (state.progress && state.progress.history) || [];
     points = hist.map(h=>({date:h.date, value:clamp(h.rollingPct,0,140), label:h.rank}));
-    document.getElementById('chartLegendNote').textContent = 'Courbe du rang (moyenne glissante 14 jours)';
+    const est = computeClassementEstimate();
+    const legendEl = document.getElementById('chartLegendNote');
+    if(est){
+      legendEl.innerHTML = `Courbe du rang (moyenne glissante 14 jours) · Classement estimé : ${est.uncertain?est.rangeLabel:'≈ '+est.estRank+'e/'+COHORT_SIZE} ${getClassementDeltaHtml(est)}`;
+    } else {
+      legendEl.textContent = 'Courbe du rang (moyenne glissante 14 jours)';
+    }
   } else {
     const chs = subjectChapters(state.selectedSubject);
     const dateSet = new Set();
@@ -1655,7 +1755,10 @@ function renderBadges(){
     const unlockedDate = state.badges && state.badges.unlocked ? state.badges.unlocked[b.id] : null;
     const card = document.createElement('div');
     card.className = 'badge-card' + (unlockedDate?' unlocked':'');
-    card.innerHTML = `<div class="bname">${escapeHtml(b.label)}</div><div class="bdesc">${escapeHtml(b.desc)}</div>${unlockedDate?`<div class="bdate">Débloqué le ${fmtDateShort(unlockedDate)}</div>`:''}`;
+    const isMystery = b.hidden && !unlockedDate;
+    const label = isMystery ? '???' : b.label;
+    const desc = isMystery ? 'Haut fait caché — à découvrir.' : b.desc;
+    card.innerHTML = `<div class="bname">${escapeHtml(label)}</div><div class="bdesc">${escapeHtml(desc)}</div>${unlockedDate?`<div class="bdate">Débloqué le ${fmtDateShort(unlockedDate)}</div>`:''}`;
     grid.appendChild(card);
   }
 }
@@ -1688,6 +1791,38 @@ document.getElementById('mockModalSave').onclick = async ()=>{
   document.getElementById('mockModalBackdrop').hidden = true;
   render();
 };
+async function renderGoalPanel(){
+  const el = document.getElementById('goalPanel');
+  if(!el) return;
+  const today = todayStr();
+  const wk = weekMonday(today);
+  const goal = await getOrCreateWeeklyGoal(today);
+  el.innerHTML = `
+    <div class="field"><input type="text" id="goalInput" placeholder="Ton objectif pour cette semaine (ex : finir de consolider Anatomie)" value="${escapeHtml(goal.text||'')}"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-muted)"><input type="checkbox" id="goalDoneCheck" ${goal.done?'checked':''}> Objectif atteint</label>
+      <button class="btn-ghost" id="goalSaveBtn">Enregistrer</button>
+    </div>
+  `;
+  document.getElementById('goalSaveBtn').onclick = async ()=>{
+    await saveWeeklyGoal(wk, document.getElementById('goalInput').value, document.getElementById('goalDoneCheck').checked);
+  };
+  document.getElementById('goalDoneCheck').onchange = async (e)=>{
+    await saveWeeklyGoal(wk, document.getElementById('goalInput').value, e.target.checked);
+  };
+}
+function renderOrphanPanel(){
+  const el = document.getElementById('orphanPanel');
+  if(!el) return;
+  const orphans = getOrphanChapters();
+  if(!orphans.length){ el.innerHTML = '<div class="empty-note">Aucun chapitre laissé de côté depuis longtemps — bon travail.</div>'; return; }
+  el.innerHTML = orphans.map(ch=>{
+    const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
+    const daysLate = dayDiff(ch.srs.nextDueDate, todayStr());
+    return `<div class="chapter-row"><div class="nm">${escapeHtml(ch.name)}<span class="sub">${subj?escapeHtml(subj.name):''} · en retard de ${daysLate}j</span></div><button class="log-btn" data-ch="${ch.id}">Logger</button></div>`;
+  }).join('');
+  el.querySelectorAll('.log-btn').forEach(btn=>{ btn.onclick = ()=>openSessionModal(btn.dataset.ch); });
+}
 function renderPacePanel(){
   const el = document.getElementById('pacePanel');
   if(!el) return;
@@ -1707,6 +1842,11 @@ function renderRiskBanner(){
   const wrap = document.getElementById('riskBannerWrap');
   const el = document.getElementById('riskBanner');
   if(!wrap || !el) return;
+  let changed = false;
+  for(const s of state.config.subjects){
+    if(subjectRiskLevel(s.id)!=='ok' && !s.everAtRisk){ s.everAtRisk = true; changed = true; }
+  }
+  if(changed) saveConfig();
   const atRisk = state.config.subjects.filter(s=>subjectRiskLevel(s.id)!=='ok');
   if(!atRisk.length){ wrap.hidden = true; return; }
   wrap.hidden = false;
@@ -1728,6 +1868,8 @@ function render(){
   try{ renderRiskBanner(); }catch(e){ console.error('renderRiskBanner',e); }
   try{ renderBadges(); }catch(e){ console.error('renderBadges',e); }
   try{ renderMockExamPanel(); }catch(e){ console.error('renderMockExamPanel',e); }
+  try{ renderGoalPanel(); }catch(e){ console.error('renderGoalPanel',e); }
+  try{ renderOrphanPanel(); }catch(e){ console.error('renderOrphanPanel',e); }
   try{ if(state.currentPage==='planning'){ renderWeek(); renderExamPanel(); } }catch(e){ console.error('renderWeek',e); }
   const note = document.getElementById('storeNote');
   if(note){
