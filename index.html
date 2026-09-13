@@ -123,6 +123,7 @@ main{flex:1;max-width:1180px;width:100%;margin:0 auto;padding:24px 24px 90px}
 .plan-item .tag{font-family:'Rajdhani';font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-muted)}
 .plan-item .name{font-weight:700;color:var(--ink)}
 .plan-item .due{font-size:11.5px;color:var(--ink-muted)}
+.plan-item .reason{font-size:11px;color:var(--ink-muted);font-style:italic;margin-top:3px}
 .plan-item .chip{margin-left:auto;flex:0 0 auto}
 .plan-item button{border:1px solid var(--accent);color:var(--accent-ink);background:var(--accent);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;white-space:nowrap}
 .plan-empty{color:var(--ink-muted);font-size:13px;padding:8px 0}
@@ -144,6 +145,10 @@ main{flex:1;max-width:1180px;width:100%;margin:0 auto;padding:24px 24px 90px}
 .subject-card .top{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:8px}
 .subject-card .top .nm{font-weight:700;font-size:13px;color:var(--ink)}
 .subject-card .top .coef{font-size:11px;color:var(--ink-muted)}
+.subject-card.risk-warning{border-color:var(--orange)}
+.subject-card.risk-critical{border-color:var(--red);box-shadow:0 0 0 1px var(--red) inset}
+.risk-ic{display:inline-flex;color:var(--red);margin-right:4px;vertical-align:middle}
+.risk-warning .risk-ic{color:var(--orange)}
 .bar{height:7px;border-radius:5px;background:var(--border);overflow:hidden;margin-bottom:6px}
 .bar > i{display:block;height:100%;border-radius:5px}
 .subject-card .meta{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-muted)}
@@ -154,6 +159,12 @@ main{flex:1;max-width:1180px;width:100%;margin:0 auto;padding:24px 24px 90px}
 .chip.yellow{background:rgba(169,139,31,.18);color:var(--yellow)}
 .chip.green{background:rgba(62,143,88,.16);color:var(--green)}
 .chip.blue{background:rgba(53,114,165,.16);color:var(--blue)}
+.badge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.badge-card{border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--surface-2);opacity:.45}
+.badge-card.unlocked{opacity:1;border-color:var(--legendary);box-shadow:0 0 12px var(--legendary-glow)}
+.badge-card .bname{font-family:'Rajdhani';font-weight:700;font-size:13px;margin-bottom:3px}
+.badge-card .bdesc{font-size:11px;color:var(--ink-muted)}
+.badge-card .bdate{font-size:10px;color:var(--accent);margin-top:4px;font-family:'JetBrains Mono'}
 .dot{width:7px;height:7px;border-radius:50%}
 .dot.red{background:var(--red)}.dot.orange{background:var(--orange)}.dot.yellow{background:var(--yellow)}.dot.green{background:var(--green)}.dot.blue{background:var(--blue)}
 
@@ -265,11 +276,22 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
               </div>
               <div class="hero-stats">
                 <div class="stat-line"><span class="lbl">XP total</span><span class="val accent mono" id="xpTotalNum">0</span></div>
+                <div class="stat-line"><span class="lbl">Streak</span><span class="val mono" id="streakNum">0</span><span class="sub">jour(s) d'affilée</span></div>
                 <div class="stat-line"><span class="lbl">J. concours</span><span class="val mono" id="dExamNum">—</span><span class="sub" id="examDateSub"></span></div>
                 <div class="stat-line"><span class="lbl">J. date cible</span><span class="val mono" id="dTargetNum">—</span></div>
                 <div class="classement-box" id="classementBox"></div>
               </div>
             </div>
+          </div>
+
+          <div class="panel" id="riskBannerWrap" hidden>
+            <div class="panel-head"><h2>Matières à risque</h2></div>
+            <div id="riskBanner"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>Rythme</h2></div>
+            <div id="pacePanel"></div>
           </div>
 
           <div class="grid2">
@@ -310,6 +332,14 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
             <div class="subject-select-row" id="progressSubjectRow"></div>
             <div class="chart-wrap" id="chartWrap"></div>
             <div class="chart-legend" id="chartLegendNote"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Concours blancs</h2></div>
+            <div id="mockExamPanel"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Hauts faits</h2></div>
+            <div class="badge-grid" id="badgeGrid"></div>
           </div>
         </section>
 
@@ -384,6 +414,18 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       <div class="field"><label>Bonnes réponses</label><input type="number" id="modalQcmCorrect" min="0"></div>
       <div class="field"><label>Sur (total)</label><input type="number" id="modalQcmTotal" min="1"></div>
     </div>
+    <button class="toggle-qcm" id="toggleFeynman">+ J'ai expliqué ce chapitre à quelqu'un (Feynman)</button>
+    <div class="field" id="feynmanRow" hidden>
+      <label>Clarté de ton explication</label>
+      <div class="feel-row" id="modalFeynman">
+        <button data-v="1">1</button>
+        <button data-v="2">2</button>
+        <button data-v="3">3</button>
+        <button data-v="4">4</button>
+        <button data-v="5">5</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-muted);margin-top:4px"><span>Confus</span><span>Limpide</span></div>
+    </div>
     <div class="modal-actions">
       <button class="btn-ghost" id="modalCancel">Annuler</button>
       <button class="btn-solid" id="modalSave">Enregistrer</button>
@@ -406,6 +448,29 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
     <div class="modal-actions">
       <button class="btn-ghost" id="examModalCancel">Annuler</button>
       <button class="btn-solid" id="examModalSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="mockModalBackdrop" hidden>
+  <div class="modal">
+    <h3>Résultat de concours blanc</h3>
+    <p class="sub">Format long, en conditions chronométrées — juste ton score pour l'instant.</p>
+    <div class="field">
+      <label>Nom</label>
+      <input type="text" id="mockModalLabel" placeholder="Concours blanc n°1">
+    </div>
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="mockModalDate">
+    </div>
+    <div class="qcm-row">
+      <div class="field"><label>Bonnes réponses</label><input type="number" id="mockModalCorrect" min="0"></div>
+      <div class="field"><label>Sur (total)</label><input type="number" id="mockModalTotal" min="1"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="mockModalCancel">Annuler</button>
+      <button class="btn-solid" id="mockModalSave">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -467,7 +532,7 @@ function fmtDateShort(dateStr){const d=new Date(dateStr+'T00:00:00');return d.to
 function fmtWeekday(dateStr){const d=new Date(dateStr+'T00:00:00');return d.toLocaleDateString('fr-FR',{weekday:'short'});}
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-const state = { config:null, chapters:[], daily:{}, progress:null, exams:{}, selectedSubject:null, currentPage:'accueil', userEmail:null };
+const state = { config:null, chapters:[], daily:{}, progress:null, exams:{}, mockExams:[], badges:{unlocked:{}}, selectedSubject:null, currentPage:'accueil', userEmail:null };
 
 function computeQcmAvgFromArray(qcms){
   if(!qcms || !qcms.length) return null;
@@ -480,12 +545,16 @@ function computeMastery(ch){
   const qcmAvg = computeQcmAvgFromArray(ch.qcms);
   const feelings = (ch.revisions||[]).map(r=>r.feeling).filter(f=>f!=null);
   const latestFeeling = feelings.length ? feelings[feelings.length-1] : null;
+  const feynmanEntries = ch.feynman||[];
+  const latestFeynman = feynmanEntries.length ? feynmanEntries[feynmanEntries.length-1].clarity : null;
   const intervalDays = (ch.srs && ch.srs.intervalDays) ? ch.srs.intervalDays : 0;
-  const repProgress = clamp(intervalDays/60, 0, 1);
-  let mastery;
-  if(qcmAvg==null && latestFeeling==null) mastery = 0;
-  else if(qcmAvg==null) mastery = (((latestFeeling-1)/4)*0.5 + repProgress*0.5)*100;
-  else mastery = ((qcmAvg/20)*0.45 + ((latestFeeling-1)/4)*0.25 + repProgress*0.30)*100;
+  const repProgress = clamp(intervalDays/60, 0, 1)*100;
+  const signals = [{v:repProgress, w:0.25}];
+  if(qcmAvg!=null) signals.push({v:(qcmAvg/20)*100, w:0.40});
+  if(latestFeeling!=null) signals.push({v:((latestFeeling-1)/4)*100, w:0.20});
+  if(latestFeynman!=null) signals.push({v:((latestFeynman-1)/4)*100, w:0.15});
+  const totalW = signals.reduce((a,s)=>a+s.w,0);
+  const mastery = signals.reduce((a,s)=>a+s.v*s.w,0)/totalW;
   return Math.round(clamp(mastery,0,100));
 }
 function masteryLevel(ch){
@@ -597,33 +666,39 @@ function buildPlan(dateStr, excludeIds){
   const introCandidates = pickIntroductionCandidates(dateStr, newLimit, excludeIds);
 
   const pool = [];
-  for(const ch of dueCandidates) pool.push({ch, score:priorityScore(ch,dateStr)});
+  for(const ch of dueCandidates) pool.push({ch, score:priorityScore(ch,dateStr), isNew:false});
   for(const ch of introCandidates){
     const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
-    pool.push({ch, score:(subj?subj.coef:1)});
+    pool.push({ch, score:(subj?subj.coef:1), isNew:true});
   }
   pool.sort((a,b)=>b.score-a.score);
 
   const chosen = [];
   const chosenSubjects = new Set();
+  const reasons = {};
   const staleIds = getStaleSubjectIds(dateStr);
   for(const subjId of staleIds){
     if(chosen.length>=slotCount) break;
     if(chosenSubjects.has(subjId)) continue;
     const entry = pool.find(p=>p.ch.subjectId===subjId && !chosen.some(c=>c.id===p.ch.id));
-    if(entry){ chosen.push(entry.ch); chosenSubjects.add(subjId); }
+    if(entry){
+      chosen.push(entry.ch); chosenSubjects.add(subjId);
+      reasons[entry.ch.id] = explainStalePick(subjId, dateStr);
+    }
   }
   for(const p of pool){
     if(chosen.length>=slotCount) break;
     if(chosenSubjects.has(p.ch.subjectId)) continue;
     if(chosen.some(c=>c.id===p.ch.id)) continue;
     chosen.push(p.ch); chosenSubjects.add(p.ch.subjectId);
+    reasons[p.ch.id] = explainPoolPick(p, dateStr);
   }
   if(chosen.length<slotCount){
     for(const p of pool){
       if(chosen.length>=slotCount) break;
       if(chosen.some(c=>c.id===p.ch.id)) continue;
       chosen.push(p.ch);
+      reasons[p.ch.id] = explainPoolPick(p, dateStr);
     }
   }
 
@@ -631,7 +706,22 @@ function buildPlan(dateStr, excludeIds){
   if(isLight) note = 'Semaine de révision légère avant le concours : pas de nouveau contenu, on consolide.';
   else if(isWeekend(dateStr)) note = 'Session de consolidation du week-end.';
   else if(period.mode==='consolidation') note = 'Phase de consolidation (après ta date cible).';
-  return {items: chosen, note, period};
+  return {items: chosen, note, period, reasons};
+}
+function explainPoolPick(p, dateStr){
+  const subj = state.config.subjects.find(s=>s.id===p.ch.subjectId);
+  const coef = subj ? subj.coef : 1;
+  if(p.isNew) return `Nouveau chapitre — rotation pondérée (${subj?subj.name:'matière'}, coef ${coef}).`;
+  const daysOverdue = Math.max(0, dayDiff(p.ch.srs.nextDueDate, dateStr));
+  const mastery = computeMastery(p.ch);
+  const overdueTxt = daysOverdue>0 ? `en retard de ${daysOverdue}j` : 'dû aujourd\'hui';
+  return `${overdueTxt} · coef ${coef} · maîtrise ${mastery}% → score ${p.score.toFixed(1)}.`;
+}
+function explainStalePick(subjectId, dateStr){
+  const subj = state.config.subjects.find(s=>s.id===subjectId);
+  const lastDate = subjectLastPlannedDate(subjectId, dateStr);
+  const daysSince = lastDate ? dayDiff(lastDate,dateStr) : null;
+  return `Garde-fou : ${subj?subj.name:'cette matière'} pas vue depuis ${daysSince!=null?daysSince+'j':'un moment'} → priorité forcée.`;
 }
 function computeSessionXp(masteryPctAfter, hours){
   const idealHours = Math.max(0.15, 0.02*masteryPctAfter);
@@ -653,7 +743,7 @@ function applySessionToSrs(ch, date, solidity, easeBoost){
     srs.intervalDays = 1;
     srs.ease = clamp(srs.ease - 0.25*easeBoost, EASE_MIN, EASE_MAX);
     srs.consecutiveBad = (srs.consecutiveBad||0) + 1;
-    if(srs.consecutiveBad >= STRUGGLING_THRESHOLD){ srs.struggling = true; }
+    if(srs.consecutiveBad >= STRUGGLING_THRESHOLD){ srs.struggling = true; srs.everStruggled = true; }
   } else {
     let base;
     if(tier==='good') base = 2.0 + clamp((solidity-0.7)/0.3,0,1)*0.5;
@@ -744,6 +834,62 @@ async function logWeeklyExam(weekKey, date, correct, total){
   await recordProgressSnapshot();
 }
 
+async function loadMockExams(){
+  const snap = await getDocs(collection(fs,'users',currentUid,'mockExams'));
+  state.mockExams = snap.docs.map(d=>d.data()).sort((a,b)=> a.date<b.date?1:-1);
+}
+async function addMockExam(date, label, correct, total){
+  correct = Number(correct)||0; total = Number(total)||0;
+  if(total<=0) return;
+  const id = uid();
+  const qcmAvg = Math.round((correct/total*20)*10)/10;
+  const entry = {id, date, label: label && label.trim() ? label.trim() : 'Concours blanc', correct, total, qcmAvg, loggedAt:new Date().toISOString()};
+  await setDoc(doc(fs,'users',currentUid,'mockExams',id), entry);
+  state.mockExams = state.mockExams || [];
+  state.mockExams.unshift(entry);
+  const examXp = clamp(Math.round((correct/total)*100), 20, 110);
+  const dayDoc = await getDailyDoc(date) || {date, plannedChapterIds:[], loggedChapterIds:[], sessionXpSum:0};
+  dayDoc.sessionXpSum = (dayDoc.sessionXpSum||0) + examXp;
+  await setDailyDoc(date, dayDoc);
+  await settleDailyAdherence();
+  await recordProgressSnapshot();
+}
+
+const BADGES = [
+  {id:'first_session', label:'Premier pas', desc:'Ta toute première session loguée.', check: ()=> state.chapters.some(c=>(c.revisions||[]).length>0)},
+  {id:'first_20', label:'Sans-faute', desc:'Un 20/20 à un QCM.', check: ()=> state.chapters.some(c=>(c.qcms||[]).some(q=>q.total>0 && q.correct>=q.total))},
+  {id:'first_consolidated', label:'Premier bastion', desc:'Un premier chapitre consolidé à 100%.', check: ()=> state.chapters.some(c=>masteryLevel(c).level==='blue')},
+  {id:'five_consolidated', label:'Cinq bastions', desc:'5 chapitres consolidés.', check: ()=> state.chapters.filter(c=>masteryLevel(c).level==='blue').length>=5},
+  {id:'ten_consolidated', label:'Forteresse', desc:'10 chapitres consolidés.', check: ()=> state.chapters.filter(c=>masteryLevel(c).level==='blue').length>=10},
+  {id:'streak3', label:'Élan', desc:'3 jours de suite.', check: ()=> computeStreak()>=3},
+  {id:'streak7', label:'Semaine parfaite', desc:'7 jours de suite.', check: ()=> computeStreak()>=7},
+  {id:'streak14', label:'Discipline de fer', desc:'14 jours de suite.', check: ()=> computeStreak()>=14},
+  {id:'streak30', label:'Machine de guerre', desc:'30 jours de suite.', check: ()=> computeStreak()>=30},
+  {id:'all_subjects_touched', label:"Tour d'horizon", desc:'Toutes les matières ont au moins un chapitre vu.', check: ()=> state.config.subjects.length>0 && state.config.subjects.every(s=>subjectChapters(s.id).some(c=>c.srs))},
+  {id:'chapters25', label:'25 chapitres', desc:'25 chapitres introduits.', check: ()=> state.chapters.filter(c=>c.srs).length>=25},
+  {id:'chapters50', label:'50 chapitres', desc:'50 chapitres introduits.', check: ()=> state.chapters.filter(c=>c.srs).length>=50},
+  {id:'first_exam', label:'Premier bilan', desc:'Un premier examen hebdomadaire passé.', check: ()=> Object.values(state.exams||{}).some(e=>e.date)},
+  {id:'first_mock', label:'Premier concours blanc', desc:'Un premier concours blanc renseigné.', check: ()=> (state.mockExams||[]).length>0},
+  {id:'first_feynman', label:'Pédagogue', desc:'Une première explication Feynman loguée.', check: ()=> state.chapters.some(c=>(c.feynman||[]).length>0)},
+  {id:'comeback', label:'Retour en force', desc:'Un chapitre "à retravailler" est redevenu solide.', check: ()=> state.chapters.some(c=>c.srs && c.srs.everStruggled && !c.srs.struggling && masteryLevel(c).level!=='red')},
+  {id:'rank_A', label:'Élite', desc:'Atteindre le rang A.', check: ()=> RANKS.indexOf((state.progress&&state.progress.rank)||'F') >= RANKS.indexOf('A')},
+  {id:'rank_S', label:'Ascendant', desc:'Atteindre le rang S.', check: ()=> RANKS.indexOf((state.progress&&state.progress.rank)||'F') >= RANKS.indexOf('S')},
+  {id:'rank_SSS', label:'Univers', desc:'Atteindre le rang SSS.', check: ()=> ((state.progress&&state.progress.rank)||'F')==='SSS'},
+];
+async function checkAndUnlockBadges(){
+  if(!state.badges) state.badges = {unlocked:{}};
+  if(!state.badges.unlocked) state.badges.unlocked = {};
+  let changed = false;
+  const today = todayStr();
+  for(const b of BADGES){
+    if(state.badges.unlocked[b.id]) continue;
+    try{
+      if(b.check()){ state.badges.unlocked[b.id] = today; changed = true; }
+    }catch(e){}
+  }
+  if(changed) await setDoc(doc(fs,'users',currentUid,'state','badges'), state.badges);
+}
+
 async function getDailyDoc(dateStr){
   if(state.daily[dateStr]) return state.daily[dateStr];
   const snap = await getDoc(doc(fs,'users',currentUid,'daily',dateStr));
@@ -760,6 +906,7 @@ async function ensurePlanPersisted(dateStr, plan){
   if(doc && doc.plannedChapterIds) return doc;
   doc = doc || {date:dateStr};
   doc.plannedChapterIds = plan.items.map(c=>c.id);
+  doc.reasons = plan.reasons || {};
   doc.mode = plan.period ? plan.period.mode : 'learning';
   doc.generatedAt = new Date().toISOString();
   doc.loggedChapterIds = doc.loggedChapterIds || [];
@@ -810,6 +957,47 @@ function weightedQcmAvgPct(){
   }
   return den? num/den : null;
 }
+function computePaceStatus(){
+  const today = todayStr();
+  const period = getPeriodMode(today);
+  if(!period.targetDate || !state.config.startedAt) return null;
+  const daysLeft = Math.max(0, dayDiff(today, period.targetDate));
+  const totalChapters = state.chapters.filter(c=>!c.archived).length;
+  const introduced = state.chapters.filter(c=>!c.archived && c.srs && c.srs.introducedAt).length;
+  const remaining = Math.max(0, totalChapters - introduced);
+  const last7 = state.chapters.filter(c=>c.srs && c.srs.introducedAt && dayDiff(c.srs.introducedAt,today)>=0 && dayDiff(c.srs.introducedAt,today)<=7).length;
+  const actualPerDay = last7/7;
+  if(daysLeft<=0) return {daysLeft, remaining, requiredPerDay:remaining, actualPerDay, behind: remaining>0};
+  const requiredPerDay = remaining/daysLeft;
+  const behind = remaining>0 && actualPerDay < requiredPerDay*0.8;
+  return {daysLeft, remaining, requiredPerDay, actualPerDay, behind};
+}
+function subjectRiskLevel(subjectId){
+  const chapters = subjectChapters(subjectId);
+  if(!chapters.length) return 'ok';
+  const period = getPeriodMode(todayStr());
+  if(!period.targetDate || !state.config.startedAt) return 'ok';
+  const totalDays = Math.max(1, dayDiff(state.config.startedAt, period.targetDate));
+  const elapsedDays = clamp(dayDiff(state.config.startedAt, todayStr()), 0, totalDays);
+  const expectedFraction = elapsedDays/totalDays;
+  const mastery = subjectMasteryAvg(subjectId)/100;
+  if(expectedFraction < 0.15) return 'ok';
+  if(mastery < expectedFraction*0.5) return 'critical';
+  if(mastery < expectedFraction*0.75) return 'warning';
+  return 'ok';
+}
+function computeStreak(){
+  let streak = 0;
+  let d = todayStr();
+  const todayDoc = state.daily[d];
+  if(!todayDoc || !(todayDoc.loggedChapterIds||[]).length) d = addDays(d,-1);
+  while(true){
+    const doc = state.daily[d];
+    if(doc && (doc.loggedChapterIds||[]).length>0){ streak++; d = addDays(d,-1); }
+    else break;
+  }
+  return streak;
+}
 function computeClassementEstimate(){
   const wm = weightedMasteryAvg();
   if(wm==null) return null;
@@ -848,8 +1036,9 @@ async function recordProgressSnapshot(){
   progress.estRank = est?est.estRank:null;
   progress.estTopPct = est?est.topPct:null;
   await setDoc(doc(fs,'users',currentUid,'progress','main'), progress);
+  await checkAndUnlockBadges();
 }
-async function logSession(chapterId, {date, hours, feeling, qcmCorrect, qcmTotal}){
+async function logSession(chapterId, {date, hours, feeling, qcmCorrect, qcmTotal, feynmanClarity}){
   const ch = state.chapters.find(c=>c.id===chapterId);
   if(!ch) return;
   ch.revisions = ch.revisions || [];
@@ -857,6 +1046,10 @@ async function logSession(chapterId, {date, hours, feeling, qcmCorrect, qcmTotal
   if(qcmTotal){
     ch.qcms = ch.qcms || [];
     ch.qcms.push({date, correct:Number(qcmCorrect)||0, total:Number(qcmTotal)});
+  }
+  if(feynmanClarity){
+    ch.feynman = ch.feynman || [];
+    ch.feynman.push({date, clarity:Number(feynmanClarity)});
   }
   const qcmAvg = computeQcmAvgFromArray(ch.qcms);
   const feelingNum = Number(feeling);
@@ -915,6 +1108,9 @@ async function loadAll(){
   for(const d of dailySnap.docs){ state.daily[d.id] = d.data(); }
   const progSnap = await getDoc(doc(fs,'users',currentUid,'progress','main'));
   state.progress = progSnap.exists() ? progSnap.data() : null;
+  const badgesSnap = await getDoc(doc(fs,'users',currentUid,'state','badges'));
+  state.badges = badgesSnap.exists() ? badgesSnap.data() : {unlocked:{}};
+  await loadMockExams();
   if(!state.config.startedAt){ state.config.startedAt = todayStr(); await saveConfig(); }
   await settleDailyAdherence();
   await recordProgressSnapshot();
@@ -938,6 +1134,7 @@ const THEME_KEY = 'rangpass_theme_pref';
 const ICON_MOON = '<svg viewBox="0 0 24 24"><path d="M20 14.2A8 8 0 1 1 9.8 4a6.4 6.4 0 0 0 10.2 10.2z" fill="currentColor"/></svg>';
 const ICON_SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.2 2.2M16.8 16.8 19 19M19 5l-2.2 2.2M7.2 16.8 5 19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_WARN = '<svg viewBox="0 0 24 24" width="12" height="12"><path d="M12 4 21.5 20H2.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10v4.2M12 17v.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 async function removeSubject(subjectId){
   const subj = state.config.subjects.find(s=>s.id===subjectId);
   if(!subj) return;
@@ -986,6 +1183,7 @@ function renderHero(){
   document.getElementById('rankCode').textContent = p.rank || 'F';
   const rankIdx = RANKS.indexOf(p.rank || 'F');
   document.getElementById('rankTitle').textContent = RANK_TITLES[rankIdx>=0?rankIdx:0];
+  document.getElementById('streakNum').textContent = computeStreak();
   const today = todayStr();
   const exam = state.config.examDate;
   const period = getPeriodMode(today);
@@ -1038,6 +1236,7 @@ function renderPlan(){
       const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
       const lvl = masteryLevel(ch);
       const done = loggedToday(ch, today);
+      const reason = (doc.reasons && doc.reasons[ch.id]) || '';
       const row = document.createElement('div');
       row.className = 'plan-item';
       row.innerHTML = `
@@ -1045,6 +1244,7 @@ function renderPlan(){
           <span class="tag">${subj?subj.name:''}</span>
           <div class="name">${escapeHtml(ch.name)}</div>
           <div class="due">${ch.srs?.nextDueDate ? 'prévu le '+fmtDateShort(ch.srs.nextDueDate) : 'jamais revu'}</div>
+          ${reason?`<div class="reason">${escapeHtml(reason)}</div>`:''}
         </div>
         <span class="chip ${lvl.level}"><span class="dot ${lvl.level}"></span>${lvl.label}</span>
         <button data-ch="${ch.id}">${done?'Refaire':'Logger'}</button>
@@ -1060,10 +1260,11 @@ function subjectCardHtml(subj){
   const qcm = subjectQcmAvg(subj.id);
   const chapters = subjectChapters(subj.id);
   const level = mastery>=95?'blue':mastery<25?'red':mastery<50?'orange':mastery<75?'yellow':'green';
+  const risk = subjectRiskLevel(subj.id);
   const div = document.createElement('div');
-  div.className = 'subject-card';
+  div.className = 'subject-card' + (risk!=='ok' ? ' risk-'+risk : '');
   div.innerHTML = `
-    <div class="top"><span class="nm">${escapeHtml(subj.name)}</span><span class="coef mono">coef ${subj.coef}</span></div>
+    <div class="top"><span class="nm">${risk!=='ok'?'<span class="risk-ic">'+ICON_WARN+'</span>':''}${escapeHtml(subj.name)}</span><span class="coef mono">coef ${subj.coef}</span></div>
     <div class="bar"><i style="width:${mastery}%;background:${levelColorVar(level)}"></i></div>
     <div class="meta"><span>${chapters.length} chapitre${chapters.length===1?'':'s'}</span><span class="mono">${mastery}% · QCM ${qcm!=null?qcm.toFixed(1):'—'}/20</span></div>
   `;
@@ -1321,12 +1522,18 @@ function openSessionModal(chapterId){
   document.getElementById('qcmRow').hidden = true;
   document.getElementById('modalQcmCorrect').value='';
   document.getElementById('modalQcmTotal').value='';
+  document.getElementById('feynmanRow').hidden = true;
+  document.querySelectorAll('#modalFeynman button').forEach(b=>b.classList.remove('active'));
   document.getElementById('modalBackdrop').hidden = false;
 }
 document.getElementById('modalCancel').onclick = ()=>{ document.getElementById('modalBackdrop').hidden = true; };
 document.getElementById('toggleQcm').onclick = ()=>{ document.getElementById('qcmRow').hidden = !document.getElementById('qcmRow').hidden; };
+document.getElementById('toggleFeynman').onclick = ()=>{ document.getElementById('feynmanRow').hidden = !document.getElementById('feynmanRow').hidden; };
 document.querySelectorAll('#modalFeel button').forEach(b=>{
   b.onclick = ()=>{ document.querySelectorAll('#modalFeel button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); };
+});
+document.querySelectorAll('#modalFeynman button').forEach(b=>{
+  b.onclick = ()=>{ document.querySelectorAll('#modalFeynman button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); };
 });
 document.getElementById('modalSave').onclick = async ()=>{
   const feelBtn = document.querySelector('#modalFeel button.active');
@@ -1336,7 +1543,9 @@ document.getElementById('modalSave').onclick = async ()=>{
   if(!feeling || !hours){ return; }
   const qcmTotal = document.getElementById('qcmRow').hidden ? null : document.getElementById('modalQcmTotal').value;
   const qcmCorrect = document.getElementById('modalQcmCorrect').value;
-  await logSession(modalChapterId, {date, hours, feeling, qcmCorrect, qcmTotal});
+  const feynBtn = document.querySelector('#modalFeynman button.active');
+  const feynmanClarity = document.getElementById('feynmanRow').hidden ? null : (feynBtn ? feynBtn.dataset.v : null);
+  await logSession(modalChapterId, {date, hours, feeling, qcmCorrect, qcmTotal, feynmanClarity});
   document.getElementById('modalBackdrop').hidden = true;
   render();
 };
@@ -1394,6 +1603,74 @@ async function renderExamPanel(){
   }
 }
 
+function renderBadges(){
+  const grid = document.getElementById('badgeGrid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  for(const b of BADGES){
+    const unlockedDate = state.badges && state.badges.unlocked ? state.badges.unlocked[b.id] : null;
+    const card = document.createElement('div');
+    card.className = 'badge-card' + (unlockedDate?' unlocked':'');
+    card.innerHTML = `<div class="bname">${escapeHtml(b.label)}</div><div class="bdesc">${escapeHtml(b.desc)}</div>${unlockedDate?`<div class="bdate">Débloqué le ${fmtDateShort(unlockedDate)}</div>`:''}`;
+    grid.appendChild(card);
+  }
+}
+function renderMockExamPanel(){
+  const el = document.getElementById('mockExamPanel');
+  if(!el) return;
+  const list = state.mockExams || [];
+  const rows = list.map(m=>`<div class="chapter-row"><div class="nm">${escapeHtml(m.label)}<span class="sub">${fmtDateShort(m.date)}</span></div><span class="chip ${m.qcmAvg>=14?'green':m.qcmAvg>=10?'yellow':'red'}">${m.correct}/${m.total} (${m.qcmAvg}/20)</span></div>`).join('');
+  el.innerHTML = `
+    <button class="btn-solid" id="mockAddBtn" style="margin-bottom:12px">+ Ajouter un résultat de concours blanc</button>
+    ${rows || '<div class="empty-note">Aucun concours blanc renseigné pour l\'instant.</div>'}
+  `;
+  document.getElementById('mockAddBtn').onclick = ()=>openMockModal();
+}
+function openMockModal(){
+  document.getElementById('mockModalLabel').value = '';
+  document.getElementById('mockModalDate').value = todayStr();
+  document.getElementById('mockModalCorrect').value = '';
+  document.getElementById('mockModalTotal').value = '';
+  document.getElementById('mockModalBackdrop').hidden = false;
+}
+document.getElementById('mockModalCancel').onclick = ()=>{ document.getElementById('mockModalBackdrop').hidden = true; };
+document.getElementById('mockModalSave').onclick = async ()=>{
+  const label = document.getElementById('mockModalLabel').value;
+  const date = document.getElementById('mockModalDate').value || todayStr();
+  const correct = document.getElementById('mockModalCorrect').value;
+  const total = document.getElementById('mockModalTotal').value;
+  if(!total) return;
+  await addMockExam(date, label, correct, total);
+  document.getElementById('mockModalBackdrop').hidden = true;
+  render();
+};
+function renderPacePanel(){
+  const el = document.getElementById('pacePanel');
+  if(!el) return;
+  const pace = computePaceStatus();
+  if(!pace){ el.innerHTML = '<div class="empty-note">Renseigne ta date de concours dans Paramètres pour activer le suivi de rythme.</div>'; return; }
+  if(pace.remaining===0){
+    el.innerHTML = `<div class="banner info">Tous tes chapitres actuels ont été vus au moins une fois — ajoute la suite du programme au fil de l'année.</div>`;
+    return;
+  }
+  const cls = pace.behind ? 'warn' : 'info';
+  const msg = pace.behind
+    ? `Tu décroches : il te reste ${pace.remaining} chapitre${pace.remaining>1?'s':''} à voir en ${pace.daysLeft}j (~${pace.requiredPerDay.toFixed(1)}/jour nécessaires), mais tu n'en introduis que ~${pace.actualPerDay.toFixed(1)}/jour ces 7 derniers jours.`
+    : `Bon rythme : il te reste ${pace.remaining} chapitre${pace.remaining>1?'s':''} à voir en ${pace.daysLeft}j (~${pace.requiredPerDay.toFixed(1)}/jour nécessaires), tu en introduis ~${pace.actualPerDay.toFixed(1)}/jour.`;
+  el.innerHTML = `<div class="banner ${cls}">${msg}</div><div class="settings-note">Basé sur les chapitres déjà ajoutés, pas sur le programme complet à venir.</div>`;
+}
+function renderRiskBanner(){
+  const wrap = document.getElementById('riskBannerWrap');
+  const el = document.getElementById('riskBanner');
+  if(!wrap || !el) return;
+  const atRisk = state.config.subjects.filter(s=>subjectRiskLevel(s.id)!=='ok');
+  if(!atRisk.length){ wrap.hidden = true; return; }
+  wrap.hidden = false;
+  el.innerHTML = atRisk.map(s=>{
+    const risk = subjectRiskLevel(s.id);
+    return `<div class="banner ${risk==='critical'?'warn':'info'}">${escapeHtml(s.name)} : maîtrise à ${subjectMasteryAvg(s.id)}%, ${risk==='critical'?'nettement':'légèrement'} en dessous de ce qu'il faudrait à ce stade avant ta date cible.</div>`;
+  }).join('');
+}
 function render(){
   if(!state.config) state.config = defaultConfig();
   try{ renderHero(); }catch(e){ console.error('renderHero',e); }
@@ -1403,6 +1680,10 @@ function render(){
   try{ renderSubjectDetail(); }catch(e){ console.error('renderSubjectDetail',e); }
   try{ renderSettings(); }catch(e){ console.error('renderSettings',e); }
   try{ renderProgressChart(); }catch(e){ console.error('renderProgressChart',e); }
+  try{ renderPacePanel(); }catch(e){ console.error('renderPacePanel',e); }
+  try{ renderRiskBanner(); }catch(e){ console.error('renderRiskBanner',e); }
+  try{ renderBadges(); }catch(e){ console.error('renderBadges',e); }
+  try{ renderMockExamPanel(); }catch(e){ console.error('renderMockExamPanel',e); }
   try{ if(state.currentPage==='planning'){ renderWeek(); renderExamPanel(); } }catch(e){ console.error('renderWeek',e); }
   const note = document.getElementById('storeNote');
   if(note){
