@@ -70,6 +70,8 @@ a{color:var(--accent)}
 .icon-btn{border:1px solid var(--border);background:var(--surface);color:var(--ink-muted);border-radius:7px;padding:6px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .icon-btn:hover{border-color:var(--red);color:var(--red)}
 .icon-btn svg{width:15px;height:15px}
+.chapter-row button.del-btn{color:var(--ink-muted)}
+.chapter-row button.del-btn:hover{border-color:var(--red);color:var(--red)}
 
 .pages{flex:1;min-width:0;display:flex;flex-direction:column}
 .topbar-mobile{display:none;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
@@ -671,6 +673,20 @@ async function addChapter(subjectId, name){
   await saveChapter(ch);
   render();
 }
+async function removeChapter(chapterId){
+  const ch = state.chapters.find(c=>c.id===chapterId);
+  if(!ch) return;
+  if(!window.confirm(`Supprimer le chapitre "${ch.name}" et tout son historique ? Cette action est définitive.`)) return;
+  await deleteDoc(doc(fs,'users',currentUid,'chapters',chapterId));
+  state.chapters = state.chapters.filter(c=>c.id!==chapterId);
+  render();
+}
+async function addSubject(name){
+  if(!name || !name.trim()) return;
+  state.config.subjects.push({id:uid(), name:name.trim(), coef:1});
+  await saveConfig();
+  render();
+}
 async function saveConfig(){
   await setDoc(doc(fs,'users',currentUid,'config','main'), state.config);
 }
@@ -885,9 +901,11 @@ function renderSubjectDetail(){
     row.innerHTML = `
       <span class="chip ${lvl.level}"><span class="dot ${lvl.level}"></span>${lvl.pct}%</span>
       <div class="nm">${escapeHtml(ch.name)}<span class="sub">${ch.srs?.nextDueDate ? 'prochaine révision : '+fmtDateShort(ch.srs.nextDueDate) : 'jamais révisé'}</span></div>
-      <button data-ch="${ch.id}">Logger</button>
+      <button class="log-btn" data-ch="${ch.id}">Logger</button>
+      <button class="icon-btn del-btn" title="Supprimer ce chapitre">${ICON_TRASH}</button>
     `;
-    row.querySelector('button').onclick = ()=>openSessionModal(ch.id);
+    row.querySelector('.log-btn').onclick = ()=>openSessionModal(ch.id);
+    row.querySelector('.del-btn').onclick = ()=>removeChapter(ch.id);
     rows.appendChild(row);
   }
 }
@@ -927,6 +945,16 @@ function renderSettings(){
     row.appendChild(right);
     panel.appendChild(row);
   }
+  const addSubjectRow = document.createElement('div');
+  addSubjectRow.className = 'chapter-add';
+  addSubjectRow.style.marginTop = '10px';
+  addSubjectRow.innerHTML = `<input type="text" id="newSubjectInput" placeholder="Nom de la nouvelle matière"><button id="newSubjectBtn">+ Ajouter une matière</button>`;
+  addSubjectRow.querySelector('#newSubjectBtn').onclick = async ()=>{
+    const input = addSubjectRow.querySelector('#newSubjectInput');
+    await addSubject(input.value);
+    input.value = '';
+  };
+  panel.appendChild(addSubjectRow);
   const note = document.createElement('div');
   note.className = 'settings-note';
   note.textContent = "Coefficients laissés à 1 par défaut — mets les tiens depuis ta grille ECTS officielle Lille pour que les priorités reflètent vraiment le concours.";
