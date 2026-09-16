@@ -612,6 +612,14 @@ function priorityScore(ch, dateStr){
   const masteryFactor = 1 - 0.9*(mastery/100);
   return (daysOverdue+1) * coef * masteryFactor;
 }
+function weekendConsolidationScore(ch, dateStr){
+  const base = priorityScore(ch, dateStr);
+  const ease = (ch.srs && ch.srs.ease) ? ch.srs.ease : EASE_DEFAULT;
+  const easeFactor = clamp((EASE_MAX-ease)/(EASE_MAX-EASE_MIN), 0, 1);
+  const recentQcm = (ch.qcms && ch.qcms.length) ? ch.qcms[ch.qcms.length-1] : null;
+  const recentQcmFactor = (recentQcm && recentQcm.total>0) ? clamp(1-(recentQcm.correct/recentQcm.total), 0, 1) : 0.3;
+  return base * (1 + 0.5*easeFactor + 0.5*recentQcmFactor);
+}
 function loggedToday(ch, dateStr){ return (ch.revisions||[]).some(r=>r.date===dateStr); }
 function computeNewPerDayLimit(){
   const pending = state.chapters.filter(c=>!c.archived && !c.srs).length;
@@ -667,15 +675,26 @@ function buildPlan(dateStr, excludeIds){
   const period = getPeriodMode(dateStr);
   if(period.mode==='post') return {items:[], note:"Le concours est passé (ou c'est aujourd'hui) — bon courage !", period};
   if(!state.chapters.length) return {items:[], note:null, period};
-  const slotCount = isWeekend(dateStr) && period.mode!=='light' ? 3 : 2;
   const isLight = period.mode==='light';
+  const weekend = isWeekend(dateStr);
+  const isFriday = new Date(dateStr+'T00:00:00').getDay()===5;
 
   const dueCandidates = state.chapters.filter(c=>!c.archived && !loggedToday(c,dateStr) && !excludeIds.has(c.id) && isDue(c,dateStr));
+
+  let slotCount;
+  if(isLight) slotCount = 2;
+  else if(weekend) slotCount = dueCandidates.length>=2 ? 3 : 2;
+  else if(isFriday) slotCount = 1;
+  else slotCount = 3;
+
   const newLimit = isLight ? 0 : computeNewPerDayLimit();
   const introCandidates = pickIntroductionCandidates(dateStr, newLimit, excludeIds);
 
   const pool = [];
-  for(const ch of dueCandidates) pool.push({ch, score:priorityScore(ch,dateStr), isNew:false});
+  for(const ch of dueCandidates){
+    const score = weekend ? weekendConsolidationScore(ch,dateStr) : priorityScore(ch,dateStr);
+    pool.push({ch, score, isNew:false});
+  }
   for(const ch of introCandidates){
     const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
     pool.push({ch, score:(subj?subj.coef:1), isNew:true});
@@ -713,7 +732,8 @@ function buildPlan(dateStr, excludeIds){
 
   let note = null;
   if(isLight) note = 'Semaine de révision légère avant le concours : pas de nouveau contenu, on consolide.';
-  else if(isWeekend(dateStr)) note = 'Session de consolidation du week-end.';
+  else if(weekend) note = `Session de consolidation du week-end (${slotCount} chapitres) — priorité aux points fragiles.`;
+  else if(isFriday) note = 'Vendredi allégé (1 chapitre) pour souffler avant le week-end.';
   else if(period.mode==='consolidation') note = 'Phase de consolidation (après ta date cible).';
   return {items: chosen, note, period, reasons};
 }
