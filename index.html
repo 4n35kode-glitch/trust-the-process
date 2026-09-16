@@ -205,7 +205,8 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
 .modal .sub{font-size:12px;color:var(--ink-muted);margin-bottom:14px}
 .field{margin-bottom:12px}
 .field label{display:block;font-size:11.5px;color:var(--ink-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
-.field input{width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface-2);color:var(--ink)}
+.field input,.field select{width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface-2);color:var(--ink);font-family:inherit;font-size:13px}
+.field input[readonly]{opacity:.75}
 .field .feel-row{display:flex;gap:6px}
 .field .feel-row button{flex:1;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:8px 0;font-size:16px}
 .field .feel-row button.active{border-color:var(--accent);background:var(--accent-glow)}
@@ -226,6 +227,17 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
 .auth-error{color:var(--red);font-size:12px;max-width:320px}
 .auth-error[hidden]{display:none}
 #app[hidden]{display:none}
+
+.timer-fullscreen{position:fixed;inset:0;z-index:200;background:radial-gradient(circle at 50% 42%, var(--surface-2), var(--bg) 72%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:24px}
+.timer-fullscreen[hidden]{display:none}
+.timer-ring-wrap{position:relative;width:min(72vw,420px);height:min(72vw,420px);display:flex;align-items:center;justify-content:center}
+.timer-ring{width:100%;height:100%;transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--border);stroke-width:5}
+.ring-fg{fill:none;stroke:var(--legendary);stroke-width:5;stroke-linecap:round;filter:drop-shadow(0 0 12px var(--legendary-glow));transition:stroke-dashoffset .25s linear}
+@media (prefers-reduced-motion: no-preference){ .ring-fg.chrono-pulse{animation:pulse 2.4s ease-in-out infinite} }
+.timer-display{position:absolute;font-weight:700;font-size:clamp(34px,7vw,60px);color:var(--ink);text-shadow:0 0 26px var(--accent-glow);letter-spacing:.03em;font-family:'JetBrains Mono',ui-monospace,monospace}
+.timer-label{font-size:14px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-muted)}
+.timer-stop-btn{padding:14px 34px;font-size:15px}
 
 .bottomnav{display:none}
 .foot-note{text-align:center;font-size:11px;color:var(--ink-muted);margin-top:8px}
@@ -256,6 +268,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       <button class="nav-btn" data-page="planning"><span class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 10h16M8 4v4M16 4v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>Planning</button>
       <button class="nav-btn" data-page="matieres"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v16H5.5C4.7 20 4 19.3 4 18.5zM20 5.5c0-.8-.7-1.5-1.5-1.5H13v16h5.5c.8 0 1.5-.7 1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>Matières</button>
       <button class="nav-btn" data-page="progression"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 15l4-4 3 3 5-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Progression</button>
+      <button class="nav-btn" data-page="minuteur"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Minuteur</button>
       <button class="nav-btn" data-page="parametres"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5v2.4M12 18.1v2.4M20.5 12h-2.4M5.9 12H3.5M17.7 6.3l-1.7 1.7M8 16l-1.7 1.7M17.7 17.7L16 16M8 8 6.3 6.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>Paramètres</button>
       <div class="spacer"></div>
       <button class="theme-btn" id="themeBtnDesktop"><span class="ic" id="themeIconDesktop"></span><span id="themeLabelDesktop">Thème sombre</span></button>
@@ -352,6 +365,24 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
           </div>
         </section>
 
+        <section class="page" data-page="minuteur" hidden>
+          <div class="panel">
+            <div class="panel-head"><h2>Minuteur de révision</h2></div>
+            <div id="timerSetup">
+              <div class="subject-select-row" id="timerModeRow">
+                <button class="active" data-mode="chrono">Chronomètre</button>
+                <button data-mode="countdown">Minuteur</button>
+              </div>
+              <div class="qcm-row" id="timerDurationFields" hidden>
+                <div class="field"><label>Heures</label><input type="number" id="timerHoursInput" min="0" value="0"></div>
+                <div class="field"><label>Minutes</label><input type="number" id="timerMinutesInput" min="0" max="59" value="25"></div>
+              </div>
+              <button class="btn-solid" id="timerStartBtn">Démarrer</button>
+              <p class="settings-note">Le temps enregistré se rattache directement à un chapitre à la fin de la session, sans ressaisie.</p>
+            </div>
+          </div>
+        </section>
+
         <section class="page" data-page="parametres" hidden>
           <div class="panel">
             <div class="panel-head"><h2>Paramètres</h2></div>
@@ -379,6 +410,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       <button data-page="planning"><span class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 10h16M8 4v4M16 4v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>Planning</button>
       <button data-page="matieres"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v16H5.5C4.7 20 4 19.3 4 18.5zM20 5.5c0-.8-.7-1.5-1.5-1.5H13v16h5.5c.8 0 1.5-.7 1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>Matières</button>
       <button data-page="progression"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 15l4-4 3 3 5-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Progrès</button>
+      <button data-page="minuteur"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Minuteur</button>
       <button data-page="parametres"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5v2.4M12 18.1v2.4M20.5 12h-2.4M5.9 12H3.5M17.7 6.3l-1.7 1.7M8 16l-1.7 1.7M17.7 17.7L16 16M8 8 6.3 6.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>Réglages</button>
     </nav>
   </div>
@@ -395,10 +427,26 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
   <p class="auth-error" id="authError" hidden></p>
 </div>
 
+<div class="timer-fullscreen" id="timerFullscreen" hidden>
+  <div class="timer-ring-wrap">
+    <svg class="timer-ring" viewBox="0 0 200 200">
+      <circle class="ring-bg" cx="100" cy="100" r="90"/>
+      <circle class="ring-fg" id="timerRingFg" cx="100" cy="100" r="90"/>
+    </svg>
+    <div class="timer-display hud" id="timerDisplay">00:00:00</div>
+  </div>
+  <div class="timer-label hud" id="timerModeLabel">Chronomètre</div>
+  <button class="btn-solid timer-stop-btn" id="timerStopBtn">Terminer la session</button>
+</div>
+
 <div class="modal-backdrop" id="modalBackdrop" hidden>
   <div class="modal">
     <h3 id="modalTitle">Logger une session</h3>
     <p class="sub" id="modalSub"></p>
+    <div class="field" id="modalChapterField" hidden>
+      <label>Chapitre</label>
+      <select id="modalChapterSelect"></select>
+    </div>
     <div class="field">
       <label>Date</label>
       <input type="date" id="modalDate">
@@ -1675,13 +1723,43 @@ function attachChartTooltip(wrap, points){
 }
 
 let modalChapterId = null;
-function openSessionModal(chapterId){
-  modalChapterId = chapterId;
-  const ch = state.chapters.find(c=>c.id===chapterId);
-  const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
-  document.getElementById('modalSub').textContent = `${subj.name} · ${ch.name}`;
+function populateChapterSelect(){
+  const sel = document.getElementById('modalChapterSelect');
+  sel.innerHTML = '';
+  for(const subj of state.config.subjects){
+    const chs = subjectChapters(subj.id);
+    if(!chs.length) continue;
+    const group = document.createElement('optgroup');
+    group.label = subj.name;
+    for(const ch of chs){
+      const opt = document.createElement('option');
+      opt.value = ch.id; opt.textContent = ch.name;
+      group.appendChild(opt);
+    }
+    sel.appendChild(group);
+  }
+}
+function openSessionModal(chapterId, opts){
+  opts = opts || {};
+  const chapterField = document.getElementById('modalChapterField');
+  if(chapterId){
+    modalChapterId = chapterId;
+    chapterField.hidden = true;
+    const ch = state.chapters.find(c=>c.id===chapterId);
+    const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
+    document.getElementById('modalSub').textContent = `${subj.name} · ${ch.name}`;
+  } else {
+    chapterField.hidden = false;
+    populateChapterSelect();
+    const sel = document.getElementById('modalChapterSelect');
+    modalChapterId = sel.value || null;
+    sel.onchange = ()=>{ modalChapterId = sel.value; };
+    document.getElementById('modalSub').textContent = 'Choisis le chapitre à rattacher à cette session.';
+  }
   document.getElementById('modalDate').value = todayStr();
-  document.getElementById('modalHours').value = '';
+  const hoursInput = document.getElementById('modalHours');
+  if(opts.presetHours!=null){ hoursInput.value = opts.presetHours; hoursInput.readOnly = true; }
+  else { hoursInput.value = ''; hoursInput.readOnly = false; }
   document.querySelectorAll('#modalFeel button').forEach(b=>b.classList.remove('active'));
   document.getElementById('qcmRow').hidden = true;
   document.getElementById('modalQcmCorrect').value='';
@@ -1713,6 +1791,73 @@ document.getElementById('modalSave').onclick = async ()=>{
   document.getElementById('modalBackdrop').hidden = true;
   render();
 };
+
+let timerInterval = null;
+let timerMode = 'chrono';
+let timerStartTs = null;
+let timerTargetMs = null;
+const TIMER_RING_CIRC = 2*Math.PI*90;
+document.querySelectorAll('#timerModeRow button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('#timerModeRow button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    timerMode = b.dataset.mode;
+    document.getElementById('timerDurationFields').hidden = timerMode!=='countdown';
+  };
+});
+function fmtTimerDuration(ms){
+  const totalSec = Math.max(0, Math.round(ms/1000));
+  const h = Math.floor(totalSec/3600);
+  const m = Math.floor((totalSec%3600)/60);
+  const s = totalSec%60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function tickTimer(){
+  const now = Date.now();
+  const elapsed = now - timerStartTs;
+  const ring = document.getElementById('timerRingFg');
+  const display = document.getElementById('timerDisplay');
+  if(timerMode==='countdown'){
+    ring.classList.remove('chrono-pulse');
+    const remaining = timerTargetMs - elapsed;
+    if(remaining<=0){
+      display.textContent = '00:00:00';
+      ring.style.strokeDasharray = TIMER_RING_CIRC;
+      ring.style.strokeDashoffset = TIMER_RING_CIRC;
+      stopTimer();
+      return;
+    }
+    display.textContent = fmtTimerDuration(remaining);
+    ring.style.strokeDasharray = TIMER_RING_CIRC;
+    ring.style.strokeDashoffset = TIMER_RING_CIRC*(1-remaining/timerTargetMs);
+  } else {
+    ring.classList.add('chrono-pulse');
+    display.textContent = fmtTimerDuration(elapsed);
+    ring.style.strokeDasharray = TIMER_RING_CIRC;
+    ring.style.strokeDashoffset = 0;
+  }
+}
+document.getElementById('timerStartBtn').onclick = ()=>{
+  if(timerMode==='countdown'){
+    const h = Number(document.getElementById('timerHoursInput').value)||0;
+    const m = Number(document.getElementById('timerMinutesInput').value)||0;
+    timerTargetMs = (h*3600+m*60)*1000;
+    if(timerTargetMs<=0) return;
+  }
+  timerStartTs = Date.now();
+  document.getElementById('timerModeLabel').textContent = timerMode==='countdown' ? 'Minuteur' : 'Chronomètre';
+  document.getElementById('timerFullscreen').hidden = false;
+  tickTimer();
+  timerInterval = setInterval(tickTimer, 250);
+};
+document.getElementById('timerStopBtn').onclick = ()=> stopTimer();
+function stopTimer(){
+  clearInterval(timerInterval); timerInterval = null;
+  const elapsedMs = timerMode==='countdown' ? Math.min(timerTargetMs, Date.now()-timerStartTs) : (Date.now()-timerStartTs);
+  document.getElementById('timerFullscreen').hidden = true;
+  const hoursDecimal = Math.max(0.01, Math.round((elapsedMs/3600000)*100)/100);
+  openSessionModal(null, {presetHours: hoursDecimal});
+}
 
 let currentExamWeekKey = null;
 function openExamModal(weekKey){
@@ -1922,7 +2067,7 @@ onAuthStateChanged(auth, async (user)=>{
       subscribeLive();
     }catch(e){ console.error('load failed', e); }
     const initialPage = (location.hash||'#accueil').replace('#','') || 'accueil';
-    setPage(['accueil','planning','matieres','progression','parametres'].includes(initialPage) ? initialPage : 'accueil');
+    setPage(['accueil','planning','matieres','progression','minuteur','parametres'].includes(initialPage) ? initialPage : 'accueil');
     render();
   } else {
     currentUid = null;
