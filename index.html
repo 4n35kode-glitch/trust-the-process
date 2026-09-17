@@ -237,7 +237,8 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
 .timer-core{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px}
 .timer-display{font-weight:700;font-size:clamp(40px,9vw,84px);color:var(--ink);text-shadow:0 0 30px var(--accent-glow);letter-spacing:.03em;font-family:'JetBrains Mono',ui-monospace,monospace}
 .timer-label{font-size:14px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-muted)}
-.timer-stop-btn{position:relative;z-index:1;padding:14px 34px;font-size:15px}
+.timer-actions{position:relative;z-index:1;display:flex;gap:12px}
+.timer-stop-btn{padding:14px 34px;font-size:15px}
 
 .bottomnav{display:none}
 .foot-note{text-align:center;font-size:11px;color:var(--ink-muted);margin-top:8px}
@@ -284,11 +285,11 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
           <div class="panel">
             <div class="hero">
               <div class="rank-hex">
-                <div class="glow"></div>
-                <div class="shape"><div class="code hud" id="rankCode">F</div><div class="lbl" id="rankTitle">Mouche</div></div>
+                <div class="glow" id="rankHexGlow"></div>
+                <div class="shape" id="rankHexShape"><div class="code hud" id="rankCode">F</div><div class="lbl" id="rankTitle">Mouche</div></div>
               </div>
               <div class="hero-stats">
-                <div class="stat-line"><span class="lbl">XP total</span><span class="val accent mono" id="xpTotalNum">0</span></div>
+                <div class="stat-line"><span class="lbl">Elo total</span><span class="val accent mono" id="xpTotalNum">0</span><button class="btn-ghost" id="eloThresholdsBtn" style="margin-left:8px;padding:4px 9px;font-size:11px">Seuils</button></div>
                 <div class="stat-line"><span class="lbl">Streak</span><span class="val mono" id="streakNum">0</span><span class="sub">jour(s) d'affilée</span></div>
                 <div class="stat-line"><span class="lbl">J. concours</span><span class="val mono" id="dExamNum">—</span><span class="sub" id="examDateSub"></span></div>
                 <div class="stat-line"><span class="lbl">J. date cible</span><span class="val mono" id="dTargetNum">—</span></div>
@@ -314,7 +315,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
 
           <div class="grid2">
             <div class="panel">
-              <div class="panel-head"><h2 id="planTitle">Aujourd'hui</h2></div>
+              <div class="panel-head"><h2 id="planTitle">Aujourd'hui</h2><button class="btn-ghost" id="bonusSessionBtn" style="font-size:11.5px;padding:6px 10px">+ Session bonus</button></div>
               <div id="planBanner"></div>
               <div class="plan-list" id="planList"></div>
             </div>
@@ -363,6 +364,10 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
             <div class="panel-head"><h2>Hauts faits</h2></div>
             <div class="badge-grid" id="badgeGrid"></div>
           </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Historique des sessions</h2></div>
+            <div id="sessionHistoryPanel"></div>
+          </div>
         </section>
 
         <section class="page" data-page="minuteur" hidden>
@@ -395,7 +400,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
               <div><b>Priorité du jour.</b> Score = (jours de retard + 1) × coefficient de la matière × (1 − 0,9 × % de maîtrise). Le coefficient pondère, il ne filtre jamais complètement : une matière sans chapitre depuis 4 jours est forcée dans le planning, et jamais deux chapitres de la même matière le même jour. Les nouveaux chapitres sont introduits en rotation pondérée entre matières (1 à 3 par jour selon le nombre en attente).</div>
               <div><b>À retravailler en profondeur.</b> Après 3 mauvais résultats d'affilée sur un chapitre, il sort de la sélection automatique (marqué en rouge) plutôt que de revenir mécaniquement chaque jour — à toi de le retravailler et de le reloguer manuellement depuis Matières.</div>
               <div><b>% de maîtrise.</b> QCM pondéré (45%), dernier ressenti (25%), avancement de l'intervalle (30%). Le bleu (consolidé) est réservé aux chapitres vraiment aboutis.</div>
-              <div><b>XP &amp; rang.</b> L'XP récompense l'efficacité (bon % en peu de temps). Le rang suit ta moyenne glissante des 14 derniers jours : il peut monter comme redescendre.</div>
+              <div><b>Elo &amp; rang.</b> L'Elo récompense l'efficacité (bon % en peu de temps). Le rang suit ta moyenne glissante des 14 derniers jours : il peut monter comme redescendre.</div>
               <div><b>Classement estimé.</b> Ton score composite (maîtrise pondérée, QCM, régularité, dernier concours blanc s'il existe) est converti en Z-score par rapport à une cohorte supposée suivre une loi normale (μ/σ réglables dans Paramètres), puis en rang via la fonction de répartition normale : plus tu montes, plus chaque progression rapproche de moins en moins vite de la 1ère place. Tout en haut de la courbe (au-delà d'un certain Z-score), l'estimation devient une fourchette plutôt qu'un rang exact, pour éviter une fausse précision. Ce n'est pas une donnée officielle de la fac, juste un repère motivant basé sur des hypothèses de départ.</div>
               <div><b>Date cible.</b> Fixée automatiquement ~2,5 semaines avant le concours (J-18). La dernière semaine passe en révision légère.</div>
             </div>
@@ -433,7 +438,10 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
     <div class="timer-display hud" id="timerDisplay">00:00:00</div>
     <div class="timer-label hud" id="timerModeLabel">Chronomètre</div>
   </div>
-  <button class="btn-solid timer-stop-btn" id="timerStopBtn">Terminer la session</button>
+  <div class="timer-actions">
+    <button class="btn-ghost" id="timerPauseBtn">Pause</button>
+    <button class="btn-solid timer-stop-btn" id="timerStopBtn">Terminer la session</button>
+  </div>
 </div>
 
 <div class="modal-backdrop" id="modalBackdrop" hidden>
@@ -480,7 +488,9 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       </div>
       <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-muted);margin-top:4px"><span>Confus</span><span>Limpide</span></div>
     </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-muted);margin-bottom:6px"><input type="checkbox" id="modalBonusCheck"> Session bonus (en plus du planning prévu)</label>
     <div class="modal-actions">
+      <button class="btn-ghost" id="modalDeleteBtn" hidden style="color:var(--red);border-color:var(--red);margin-right:auto">Supprimer</button>
       <button class="btn-ghost" id="modalCancel">Annuler</button>
       <button class="btn-solid" id="modalSave">Enregistrer</button>
     </div>
@@ -529,6 +539,17 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
   </div>
 </div>
 
+<div class="modal-backdrop" id="eloThresholdsBackdrop" hidden>
+  <div class="modal" style="max-width:380px">
+    <h3>Seuils de rang</h3>
+    <p class="sub">Ton rang suit ta moyenne glissante des 14 derniers jours (en % du rythme cible). Voici le seuil de chaque rang.</p>
+    <div id="eloThresholdsList" style="max-height:50vh;overflow-y:auto"></div>
+    <div class="modal-actions">
+      <button class="btn-solid" id="eloThresholdsCloseBtn">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
@@ -558,6 +579,8 @@ const BASE_NEW_PER_DAY = 1;
 const MAX_NEW_PER_DAY = 3;
 const RANKS = ["F","D-","D","D+","C-","C","C+","B-","B","B+","A-","A","A+","S-","S","S+","SS-","SS","SS+","SSS"];
 const RANK_TITLES = ["Mouche","Rat","Renard","Loup","Ours","Lion","Éléphant","Baleine","Titan","Géant","Colosse","Continent","Océan","Planète","Étoile","Galaxie","Amas de galaxies","Multivers","Infini","Univers"];
+const RANK_COLORS = ["#8a8f98","#9c8a6f","#a97c52","#b56b3d","#c2a63d","#c9b82e","#8fbb3a","#4fbf6b","#33b389","#2fae9e","#2f9fc4","#3d7fdb","#5f63e0","#7a4fe0","#9b3fdb","#c936c9","#e0328f","#ef4a63","#f2762f","#ffd23f"];
+function rankColor(rank){ const i=RANKS.indexOf(rank); return RANK_COLORS[i>=0?i:0]; }
 const RANK_THRESH = [0,5,11,18,25,32,39,46,53,60,67,74,81,88,95,102,109,116,123,131];
 const TARGET_DAILY_POINTS = 80;
 const ROLLING_WINDOW = 14;
@@ -586,7 +609,7 @@ function fmtDateShort(dateStr){const d=new Date(dateStr+'T00:00:00');return d.to
 function fmtWeekday(dateStr){const d=new Date(dateStr+'T00:00:00');return d.toLocaleDateString('fr-FR',{weekday:'short'});}
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-const state = { config:null, chapters:[], daily:{}, progress:null, exams:{}, mockExams:[], badges:{unlocked:{}}, goals:{}, selectedSubject:null, currentPage:'accueil', userEmail:null };
+const state = { config:null, chapters:[], daily:{}, progress:null, exams:{}, mockExams:[], badges:{unlocked:{}}, goals:{}, sessions:[], selectedSubject:null, currentPage:'accueil', userEmail:null };
 
 function computeQcmAvgFromArray(qcms){
   if(!qcms || !qcms.length) return null;
@@ -808,23 +831,27 @@ function qualityTier(solidity){
   if(solidity < 0.7) return 'medium';
   return 'good';
 }
-function applySessionToSrs(ch, date, solidity, easeBoost){
+const BONUS_SCHEDULE_IMPACT = 0.2;
+function applySessionToSrs(ch, date, solidity, easeBoost, scheduleImpact){
   easeBoost = easeBoost || 1;
+  scheduleImpact = scheduleImpact==null ? 1 : scheduleImpact;
   const srs = ch.srs || {ease:EASE_DEFAULT, intervalDays:null, nextDueDate:null, lastReviewedAt:null, introducedAt:date, consecutiveBad:0, struggling:false};
   const tier = qualityTier(solidity);
   const prevInterval = srs.intervalDays || 1;
   if(tier==='bad'){
-    srs.intervalDays = 1;
-    srs.ease = clamp(srs.ease - 0.25*easeBoost, EASE_MIN, EASE_MAX);
+    const dampedInterval = prevInterval + (1-prevInterval)*scheduleImpact;
+    srs.intervalDays = Math.max(1, Math.round(dampedInterval));
+    srs.ease = clamp(srs.ease - 0.25*easeBoost*scheduleImpact, EASE_MIN, EASE_MAX);
     srs.consecutiveBad = (srs.consecutiveBad||0) + 1;
     if(srs.consecutiveBad >= STRUGGLING_THRESHOLD){ srs.struggling = true; srs.everStruggled = true; }
   } else {
     let base;
     if(tier==='good') base = 2.0 + clamp((solidity-0.7)/0.3,0,1)*0.5;
     else base = 1.3 + clamp((solidity-0.35)/0.35,0,1)*0.2;
-    const mult = base * (srs.ease/EASE_DEFAULT);
-    srs.intervalDays = clamp(Math.round(prevInterval*mult), 1, 180);
-    if(tier==='good') srs.ease = clamp(srs.ease + 0.15*easeBoost, EASE_MIN, EASE_MAX);
+    const fullMult = base * (srs.ease/EASE_DEFAULT);
+    const dampedMult = 1 + (fullMult-1)*scheduleImpact;
+    srs.intervalDays = clamp(Math.round(prevInterval*dampedMult), 1, 180);
+    if(tier==='good') srs.ease = clamp(srs.ease + 0.15*easeBoost*scheduleImpact, EASE_MIN, EASE_MAX);
     srs.consecutiveBad = 0;
     srs.struggling = false;
   }
@@ -888,24 +915,18 @@ async function logWeeklyExam(weekKey, date, correct, total){
   state.exams[weekKey] = exam;
 
   const solidity = clamp(correct/total, 0, 1);
-  const weight = 2;
+  const feeling = clamp(Math.round(1+4*solidity), 1, 5);
   for(const chId of exam.coveredChapterIds){
     const ch = state.chapters.find(c=>c.id===chId);
     if(!ch) continue;
-    ch.qcms = ch.qcms || [];
-    ch.qcms.push({date, correct: correct*weight, total: total*weight, isExam:true});
-    applySessionToSrs(ch, date, solidity, 2);
-    const masteryPct = computeMastery(ch);
-    ch.history = ch.history || [];
-    ch.history.push({date, masteryPct, qcmAvg: computeQcmAvgFromArray(ch.qcms)});
-    await saveChapter(ch);
+    const entry = {
+      id: uid(), chapterId: chId, subjectId: ch.subjectId, date, hours: 0, feeling,
+      qcm: {correct, total}, feynman: null, kind:'exam', source:'weeklyExam',
+      easeBoost: 2, qcmWeight: 2, scheduleImpact: 1, createdAt: new Date().toISOString(),
+    };
+    state.sessions.push(entry);
+    await recomputeAfterSessionChange(chId, [date]);
   }
-  const examXp = clamp(Math.round(solidity*100*0.9), 15, 95);
-  const dayDoc = await getDailyDoc(date) || {date, plannedChapterIds:[], loggedChapterIds:[], sessionXpSum:0};
-  dayDoc.sessionXpSum = (dayDoc.sessionXpSum||0) + examXp;
-  await setDailyDoc(date, dayDoc);
-  await settleDailyAdherence();
-  await recordProgressSnapshot();
 }
 
 function goalDocRef(weekKey){ return doc(fs,'users',currentUid,'weeklyGoals',weekKey); }
@@ -948,7 +969,8 @@ async function addMockExam(date, label, correct, total){
   state.mockExams.unshift(entry);
   const examXp = clamp(Math.round((correct/total)*100), 20, 110);
   const dayDoc = await getDailyDoc(date) || {date, plannedChapterIds:[], loggedChapterIds:[], sessionXpSum:0};
-  dayDoc.sessionXpSum = (dayDoc.sessionXpSum||0) + examXp;
+  dayDoc.mockXp = (dayDoc.mockXp||0) + examXp;
+  dayDoc.sessionXpSum = state.sessions.filter(s=>s.date===date).reduce((a,s)=>a+(s.xp||0),0) + (dayDoc.bonusXp||0) + dayDoc.mockXp;
   await setDailyDoc(date, dayDoc);
   await settleDailyAdherence();
   await recordProgressSnapshot();
@@ -1026,7 +1048,7 @@ const BADGES = [
   {id:'comeback', label:'Retour en force', desc:'Un chapitre "à retravailler" est redevenu solide.', hidden:true, check: ()=> state.chapters.some(c=>c.srs && c.srs.everStruggled && !c.srs.struggling && masteryLevel(c).level!=='red')},
   {id:'marathon', label:'Marathonien', desc:'Une session unique de 4 heures ou plus.', hidden:true, check: ()=> state.chapters.some(c=>(c.revisions||[]).some(r=>r.hours>=4))},
   {id:'legendary_ease', label:'Grâce naturelle', desc:'Un chapitre a atteint le facteur de facilité maximum.', hidden:true, check: ()=> state.chapters.some(c=>c.srs && c.srs.ease>=EASE_MAX)},
-  {id:'century_xp', label:'Centurion', desc:'1000 XP cumulés.', hidden:true, check: ()=> ((state.progress&&state.progress.totalXp)||0) >= 1000},
+  {id:'century_xp', label:'Centurion', desc:'1000 Elo cumulés.', hidden:true, check: ()=> ((state.progress&&state.progress.totalXp)||0) >= 1000},
   {id:'perfect_subject', label:'Sans-faute matière', desc:'Une matière entière avec une moyenne QCM ≥19/20.', hidden:true, check: ()=> state.config.subjects.some(s=>{ const q=subjectQcmAvg(s.id); return q!=null && q>=19; })},
 ];
 async function checkAndUnlockBadges(){
@@ -1232,34 +1254,137 @@ async function recordProgressSnapshot(){
   await setDoc(doc(fs,'users',currentUid,'progress','main'), progress);
   await checkAndUnlockBadges();
 }
-async function logSession(chapterId, {date, hours, feeling, qcmCorrect, qcmTotal, feynmanClarity}){
+function sessionSortKey(s){ return s.date + '_' + (s.createdAt||''); }
+async function migrateLegacySessionsIfNeeded(){
+  let anyMigrated = false;
+  const changedChapters = new Set();
+  for(const ch of state.chapters){
+    if(ch.sessionsMigrated){ continue; }
+    const hasLegacy = (ch.revisions&&ch.revisions.length) || (ch.qcms&&ch.qcms.length) || (ch.feynman&&ch.feynman.length);
+    const hasSessions = state.sessions.some(s=>s.chapterId===ch.id);
+    if(hasLegacy && !hasSessions){
+      const qcmsPool = (ch.qcms||[]).slice();
+      const feynPool = (ch.feynman||[]).slice();
+      for(const r of (ch.revisions||[])){
+        const qi = qcmsPool.findIndex(q=>q.date===r.date);
+        const qcm = qi>=0 ? qcmsPool.splice(qi,1)[0] : null;
+        const fi = feynPool.findIndex(f=>f.date===r.date);
+        const feyn = fi>=0 ? feynPool.splice(fi,1)[0] : null;
+        const entry = {id:uid(), chapterId:ch.id, subjectId:ch.subjectId, date:r.date, hours:r.hours||0, feeling:r.feeling,
+          qcm: qcm?{correct:qcm.correct,total:qcm.total}:null, feynman: feyn?{clarity:feyn.clarity}:null,
+          kind:'session', source:'manual', createdAt:new Date().toISOString()};
+        state.sessions.push(entry);
+        await setDoc(doc(fs,'users',currentUid,'sessions',entry.id), entry);
+      }
+      for(const q of qcmsPool){
+        const entry = {id:uid(), chapterId:ch.id, subjectId:ch.subjectId, date:q.date, hours:0, feeling:3,
+          qcm:{correct:q.correct,total:q.total}, feynman:null, kind:'bonus', source:'manual', createdAt:new Date().toISOString()};
+        state.sessions.push(entry);
+        await setDoc(doc(fs,'users',currentUid,'sessions',entry.id), entry);
+      }
+      for(const f of feynPool){
+        const entry = {id:uid(), chapterId:ch.id, subjectId:ch.subjectId, date:f.date, hours:0, feeling:3,
+          qcm:null, feynman:{clarity:f.clarity}, kind:'bonus', source:'manual', createdAt:new Date().toISOString()};
+        state.sessions.push(entry);
+        await setDoc(doc(fs,'users',currentUid,'sessions',entry.id), entry);
+      }
+      changedChapters.add(ch.id);
+      anyMigrated = true;
+    }
+    ch.sessionsMigrated = true;
+    changedChapters.add(ch.id);
+  }
+  if(!changedChapters.size) return;
+  for(const chId of changedChapters){
+    const ch = state.chapters.find(c=>c.id===chId);
+    if(!ch) continue;
+    if(anyMigrated) replayChapterFromSessions(ch);
+    await saveChapter(ch);
+  }
+  if(anyMigrated){
+    const dates = new Set(state.sessions.map(s=>s.date));
+    for(const d of dates){ await syncDailyFromSessions(d); }
+  }
+}
+function replayChapterFromSessions(ch){
+  const sessions = state.sessions.filter(s=>s.chapterId===ch.id).sort((a,b)=> sessionSortKey(a)<sessionSortKey(b)?-1:1);
+  ch.revisions = [];
+  ch.qcms = [];
+  ch.feynman = [];
+  ch.history = [];
+  ch.srs = null;
+  for(const s of sessions){
+    ch.revisions.push({date:s.date, hours:s.hours, feeling:s.feeling});
+    if(s.qcm){
+      const w = s.qcmWeight||1;
+      ch.qcms.push({date:s.date, correct:s.qcm.correct*w, total:s.qcm.total*w});
+    }
+    if(s.feynman) ch.feynman.push({date:s.date, clarity:s.feynman.clarity});
+    const qcmAvg = computeQcmAvgFromArray(ch.qcms);
+    const solidity = qcmAvg!=null ? (0.5*((s.feeling-1)/4) + 0.5*(qcmAvg/20)) : ((s.feeling-1)/4);
+    const impact = s.scheduleImpact!=null ? s.scheduleImpact : (s.kind==='bonus' ? BONUS_SCHEDULE_IMPACT : 1);
+    applySessionToSrs(ch, s.date, solidity, s.easeBoost||1, impact);
+    const masteryPct = computeMastery(ch);
+    ch.history.push({date:s.date, masteryPct, qcmAvg});
+    s.xp = computeSessionXp(masteryPct, s.hours||0.1);
+  }
+}
+async function persistSessionXp(sessions){
+  for(const s of sessions){ await setDoc(doc(fs,'users',currentUid,'sessions',s.id), s); }
+}
+async function syncDailyFromSessions(dateStr){
+  let d = await getDailyDoc(dateStr) || {date:dateStr, plannedChapterIds:[], loggedChapterIds:[], sessionXpSum:0};
+  const daySessions = state.sessions.filter(s=>s.date===dateStr);
+  d.loggedChapterIds = Array.from(new Set(daySessions.map(s=>s.chapterId)));
+  d.sessionXpSum = daySessions.reduce((a,s)=>a+(s.xp||0),0) + (d.bonusXp||0) + (d.mockXp||0);
+  await setDailyDoc(dateStr, d);
+}
+async function recomputeAfterSessionChange(chapterId, affectedDates){
   const ch = state.chapters.find(c=>c.id===chapterId);
-  if(!ch) return;
-  ch.revisions = ch.revisions || [];
-  ch.revisions.push({date, hours: Number(hours)||0, feeling: Number(feeling)});
-  if(qcmTotal){
-    ch.qcms = ch.qcms || [];
-    ch.qcms.push({date, correct:Number(qcmCorrect)||0, total:Number(qcmTotal)});
+  if(ch){
+    replayChapterFromSessions(ch);
+    await saveChapter(ch);
+    await persistSessionXp(state.sessions.filter(s=>s.chapterId===chapterId));
   }
-  if(feynmanClarity){
-    ch.feynman = ch.feynman || [];
-    ch.feynman.push({date, clarity:Number(feynmanClarity)});
-  }
-  const qcmAvg = computeQcmAvgFromArray(ch.qcms);
-  const feelingNum = Number(feeling);
-  const solidity = qcmAvg!=null ? (0.5*((feelingNum-1)/4) + 0.5*(qcmAvg/20)) : ((feelingNum-1)/4);
-  applySessionToSrs(ch, date, solidity);
-  const masteryPct = computeMastery(ch);
-  ch.history = ch.history || [];
-  ch.history.push({date, masteryPct, qcmAvg});
-  await saveChapter(ch);
-  const doc = await getDailyDoc(date) || {date, plannedChapterIds:[], loggedChapterIds:[], sessionXpSum:0};
-  const xp = computeSessionXp(masteryPct, Number(hours)||0.1);
-  doc.loggedChapterIds = Array.from(new Set([...(doc.loggedChapterIds||[]), chapterId]));
-  doc.sessionXpSum = (doc.sessionXpSum||0) + xp;
-  await setDailyDoc(date, doc);
+  for(const d of affectedDates){ await syncDailyFromSessions(d); }
   await settleDailyAdherence();
   await recordProgressSnapshot();
+}
+async function addSessionLog({chapterId, date, hours, feeling, qcmCorrect, qcmTotal, feynmanClarity, kind, source}){
+  const ch = state.chapters.find(c=>c.id===chapterId);
+  if(!ch) return;
+  const entry = {
+    id: uid(), chapterId, subjectId: ch.subjectId, date,
+    hours: Number(hours)||0, feeling: Number(feeling),
+    qcm: qcmTotal ? {correct:Number(qcmCorrect)||0, total:Number(qcmTotal)} : null,
+    feynman: feynmanClarity ? {clarity:Number(feynmanClarity)} : null,
+    kind: kind || 'session', source: source || 'manual',
+    createdAt: new Date().toISOString(),
+  };
+  state.sessions.push(entry);
+  await recomputeAfterSessionChange(chapterId, [date]);
+}
+async function updateSessionLog(sessionId, patch){
+  const s = state.sessions.find(x=>x.id===sessionId);
+  if(!s) return;
+  const oldDate = s.date, oldChapterId = s.chapterId;
+  if(patch.chapterId!=null){ s.chapterId = patch.chapterId; const nc=state.chapters.find(c=>c.id===patch.chapterId); if(nc) s.subjectId=nc.subjectId; }
+  if(patch.date!=null) s.date = patch.date;
+  if(patch.hours!=null) s.hours = Number(patch.hours)||0;
+  if(patch.feeling!=null) s.feeling = Number(patch.feeling);
+  s.qcm = patch.qcmTotal ? {correct:Number(patch.qcmCorrect)||0, total:Number(patch.qcmTotal)} : null;
+  s.feynman = patch.feynmanClarity ? {clarity:Number(patch.feynmanClarity)} : null;
+  if(patch.kind!=null) s.kind = patch.kind;
+  const affectedChapters = new Set([oldChapterId, s.chapterId]);
+  const affectedDates = new Set([oldDate, s.date]);
+  for(const chId of affectedChapters){ await recomputeAfterSessionChange(chId, Array.from(affectedDates)); }
+}
+async function deleteSessionLog(sessionId){
+  const s = state.sessions.find(x=>x.id===sessionId);
+  if(!s) return;
+  state.sessions = state.sessions.filter(x=>x.id!==sessionId);
+  await deleteDoc(doc(fs,'users',currentUid,'sessions',sessionId));
+  await recomputeAfterSessionChange(s.chapterId, [s.date]);
 }
 async function saveChapter(ch){
   const i = state.chapters.findIndex(c=>c.id===ch.id);
@@ -1306,6 +1431,9 @@ async function loadAll(){
   state.badges = badgesSnap.exists() ? badgesSnap.data() : {unlocked:{}};
   await loadMockExams();
   await loadWeeklyGoals();
+  const sessSnap = await getDocs(collection(fs,'users',currentUid,'sessions'));
+  state.sessions = sessSnap.docs.map(d=>d.data());
+  await migrateLegacySessionsIfNeeded();
   if(!state.config.startedAt){ state.config.startedAt = todayStr(); await saveConfig(); }
   await settleDailyAdherence();
   await recordProgressSnapshot();
@@ -1378,6 +1506,12 @@ function renderHero(){
   document.getElementById('rankCode').textContent = p.rank || 'F';
   const rankIdx = RANKS.indexOf(p.rank || 'F');
   document.getElementById('rankTitle').textContent = RANK_TITLES[rankIdx>=0?rankIdx:0];
+  const rc = RANK_COLORS[rankIdx>=0?rankIdx:0];
+  document.getElementById('rankCode').style.color = rc;
+  document.getElementById('rankCode').style.textShadow = `0 0 18px ${rc}99`;
+  document.getElementById('rankHexShape').style.borderColor = rc;
+  document.getElementById('rankHexShape').style.boxShadow = `0 0 30px ${rc}55 inset`;
+  document.getElementById('rankHexGlow').style.background = `radial-gradient(circle, ${rc}55, transparent 68%)`;
   document.getElementById('streakNum').textContent = computeStreak();
   const today = todayStr();
   const exam = state.config.examDate;
@@ -1720,6 +1854,7 @@ function attachChartTooltip(wrap, points){
 }
 
 let modalChapterId = null;
+let modalSource = 'manual';
 function populateChapterSelect(){
   const sel = document.getElementById('modalChapterSelect');
   sel.innerHTML = '';
@@ -1736,10 +1871,15 @@ function populateChapterSelect(){
     sel.appendChild(group);
   }
 }
+let editingSessionId = null;
 function openSessionModal(chapterId, opts){
   opts = opts || {};
+  editingSessionId = opts.editSession ? opts.editSession.id : null;
+  document.getElementById('modalTitle').textContent = editingSessionId ? 'Modifier la session' : 'Logger une session';
+  document.getElementById('modalDeleteBtn').hidden = !editingSessionId;
   const chapterField = document.getElementById('modalChapterField');
-  if(chapterId){
+  const es = opts.editSession;
+  if(chapterId && !es){
     modalChapterId = chapterId;
     chapterField.hidden = true;
     const ch = state.chapters.find(c=>c.id===chapterId);
@@ -1749,23 +1889,28 @@ function openSessionModal(chapterId, opts){
     chapterField.hidden = false;
     populateChapterSelect();
     const sel = document.getElementById('modalChapterSelect');
+    if(es) sel.value = es.chapterId;
     modalChapterId = sel.value || null;
     sel.onchange = ()=>{ modalChapterId = sel.value; };
-    document.getElementById('modalSub').textContent = 'Choisis le chapitre à rattacher à cette session.';
+    document.getElementById('modalSub').textContent = editingSessionId ? 'Modifie le chapitre, la durée ou le résultat, puis enregistre.' : 'Choisis le chapitre à rattacher à cette session.';
   }
-  document.getElementById('modalDate').value = todayStr();
+  document.getElementById('modalDate').value = es ? es.date : todayStr();
   const hoursInput = document.getElementById('modalHours');
-  if(opts.presetHours!=null){ hoursInput.value = opts.presetHours; hoursInput.readOnly = true; }
+  if(es){ hoursInput.value = es.hours; hoursInput.readOnly = false; }
+  else if(opts.presetHours!=null){ hoursInput.value = opts.presetHours; hoursInput.readOnly = true; }
   else { hoursInput.value = ''; hoursInput.readOnly = false; }
-  document.querySelectorAll('#modalFeel button').forEach(b=>b.classList.remove('active'));
-  document.getElementById('qcmRow').hidden = true;
-  document.getElementById('modalQcmCorrect').value='';
-  document.getElementById('modalQcmTotal').value='';
-  document.getElementById('feynmanRow').hidden = true;
-  document.querySelectorAll('#modalFeynman button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#modalFeel button').forEach(b=>{ b.classList.toggle('active', es && String(b.dataset.v)===String(es.feeling)); });
+  document.getElementById('qcmRow').hidden = !(es && es.qcm);
+  document.getElementById('modalQcmCorrect').value = (es && es.qcm) ? es.qcm.correct : '';
+  document.getElementById('modalQcmTotal').value = (es && es.qcm) ? es.qcm.total : '';
+  document.getElementById('feynmanRow').hidden = !(es && es.feynman);
+  document.querySelectorAll('#modalFeynman button').forEach(b=>{ b.classList.toggle('active', es && es.feynman && String(b.dataset.v)===String(es.feynman.clarity)); });
+  document.getElementById('modalBonusCheck').checked = es ? es.kind==='bonus' : !!opts.bonus;
+  modalSource = es ? (es.source||'manual') : (opts.source || 'manual');
   document.getElementById('modalBackdrop').hidden = false;
 }
 document.getElementById('modalCancel').onclick = ()=>{ document.getElementById('modalBackdrop').hidden = true; };
+document.getElementById('bonusSessionBtn').onclick = ()=> openSessionModal(null, {bonus:true});
 document.getElementById('toggleQcm').onclick = ()=>{ document.getElementById('qcmRow').hidden = !document.getElementById('qcmRow').hidden; };
 document.getElementById('toggleFeynman').onclick = ()=>{ document.getElementById('feynmanRow').hidden = !document.getElementById('feynmanRow').hidden; };
 document.querySelectorAll('#modalFeel button').forEach(b=>{
@@ -1784,7 +1929,19 @@ document.getElementById('modalSave').onclick = async ()=>{
   const qcmCorrect = document.getElementById('modalQcmCorrect').value;
   const feynBtn = document.querySelector('#modalFeynman button.active');
   const feynmanClarity = document.getElementById('feynmanRow').hidden ? null : (feynBtn ? feynBtn.dataset.v : null);
-  await logSession(modalChapterId, {date, hours, feeling, qcmCorrect, qcmTotal, feynmanClarity});
+  const kind = document.getElementById('modalBonusCheck').checked ? 'bonus' : 'session';
+  if(editingSessionId){
+    await updateSessionLog(editingSessionId, {chapterId: modalChapterId, date, hours, feeling, qcmCorrect, qcmTotal, feynmanClarity, kind});
+  } else {
+    await addSessionLog({chapterId: modalChapterId, date, hours, feeling, qcmCorrect, qcmTotal, feynmanClarity, kind, source: modalSource});
+  }
+  document.getElementById('modalBackdrop').hidden = true;
+  render();
+};
+document.getElementById('modalDeleteBtn').onclick = async ()=>{
+  if(!editingSessionId) return;
+  if(!window.confirm('Supprimer cette session ? Le % de maîtrise et le planning du chapitre seront recalculés.')) return;
+  await deleteSessionLog(editingSessionId);
   document.getElementById('modalBackdrop').hidden = true;
   render();
 };
@@ -1793,6 +1950,8 @@ let timerInterval = null;
 let timerMode = 'chrono';
 let timerStartTs = null;
 let timerTargetMs = null;
+let timerAccumMs = 0;
+let timerPaused = false;
 document.querySelectorAll('#timerModeRow button').forEach(b=>{
   b.onclick = ()=>{
     document.querySelectorAll('#timerModeRow button').forEach(x=>x.classList.remove('active'));
@@ -1808,9 +1967,11 @@ function fmtTimerDuration(ms){
   const s = totalSec%60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
+function currentElapsedMs(){
+  return timerAccumMs + (timerPaused ? 0 : (Date.now()-timerStartTs));
+}
 function tickTimer(){
-  const now = Date.now();
-  const elapsed = now - timerStartTs;
+  const elapsed = currentElapsedMs();
   const display = document.getElementById('timerDisplay');
   if(timerMode==='countdown'){
     const remaining = timerTargetMs - elapsed;
@@ -1831,19 +1992,33 @@ document.getElementById('timerStartBtn').onclick = ()=>{
     timerTargetMs = (h*3600+m*60)*1000;
     if(timerTargetMs<=0) return;
   }
+  timerAccumMs = 0;
+  timerPaused = false;
   timerStartTs = Date.now();
+  document.getElementById('timerPauseBtn').textContent = 'Pause';
   document.getElementById('timerModeLabel').textContent = timerMode==='countdown' ? 'Minuteur' : 'Chronomètre';
   document.getElementById('timerFullscreen').hidden = false;
   tickTimer();
   timerInterval = setInterval(tickTimer, 250);
 };
+document.getElementById('timerPauseBtn').onclick = ()=>{
+  if(!timerPaused){
+    timerAccumMs += Date.now()-timerStartTs;
+    timerPaused = true;
+    document.getElementById('timerPauseBtn').textContent = 'Reprendre';
+  } else {
+    timerStartTs = Date.now();
+    timerPaused = false;
+    document.getElementById('timerPauseBtn').textContent = 'Pause';
+  }
+};
 document.getElementById('timerStopBtn').onclick = ()=> stopTimer();
 function stopTimer(){
   clearInterval(timerInterval); timerInterval = null;
-  const elapsedMs = timerMode==='countdown' ? Math.min(timerTargetMs, Date.now()-timerStartTs) : (Date.now()-timerStartTs);
+  const elapsedMs = timerMode==='countdown' ? Math.min(timerTargetMs, currentElapsedMs()) : currentElapsedMs();
   document.getElementById('timerFullscreen').hidden = true;
   const hoursDecimal = Math.max(0.01, Math.round((elapsedMs/3600000)*100)/100);
-  openSessionModal(null, {presetHours: hoursDecimal});
+  openSessionModal(null, {presetHours: hoursDecimal, source:'timer'});
 }
 
 let currentExamWeekKey = null;
@@ -1871,7 +2046,7 @@ async function renderExamPanel(){
   if(!panel) return;
   const today = todayStr();
   if(!isWeekend(today)){
-    panel.innerHTML = `<div class="empty-note">Ton bilan hebdomadaire sera disponible ce week-end : un gros point de contrôle sur plusieurs chapitres vus cette semaine, avec un poids plus fort dans ta maîtrise, ton XP et ton rang.</div>`;
+    panel.innerHTML = `<div class="empty-note">Ton bilan hebdomadaire sera disponible ce week-end : un gros point de contrôle sur plusieurs chapitres vus cette semaine, avec un poids plus fort dans ta maîtrise, ton Elo et ton rang.</div>`;
     return;
   }
   const exam = await getOrCreateWeeklyExam(today);
@@ -1891,7 +2066,7 @@ async function renderExamPanel(){
     `;
   } else {
     panel.innerHTML = `
-      <div class="plan-mode">Ce bilan couvre ${items.length} chapitre${items.length>1?'s':''} vus cette semaine, avec un poids renforcé sur ta maîtrise, ton XP et ton rang.</div>
+      <div class="plan-mode">Ce bilan couvre ${items.length} chapitre${items.length>1?'s':''} vus cette semaine, avec un poids renforcé sur ta maîtrise, ton Elo et ton rang.</div>
       <div class="day-chip-row" style="margin-bottom:12px">${chipsHtml}</div>
       <button class="btn-solid" id="examTakeBtn">J'ai passé mon examen — saisir mon résultat</button>
     `;
@@ -1925,6 +2100,36 @@ function renderMockExamPanel(){
   `;
   document.getElementById('mockAddBtn').onclick = ()=>openMockModal();
 }
+function renderSessionHistory(){
+  const el = document.getElementById('sessionHistoryPanel');
+  if(!el) return;
+  const list = (state.sessions||[]).slice().sort((a,b)=> sessionSortKey(b)<sessionSortKey(a)?-1:1).slice(0,60);
+  if(!list.length){ el.innerHTML = '<div class="empty-note">Aucune session loguée pour l\'instant.</div>'; return; }
+  el.innerHTML = list.map(s=>{
+    const ch = state.chapters.find(c=>c.id===s.chapterId);
+    const subj = ch ? state.config.subjects.find(su=>su.id===ch.subjectId) : null;
+    const kindLabel = s.kind==='bonus' ? 'Bonus' : s.kind==='exam' ? 'Examen' : 'Session';
+    const sourceLabel = s.source==='timer' ? 'minuteur' : s.source==='weeklyExam' ? 'bilan hebdo' : 'manuel';
+    return `<div class="chapter-row">
+      <div class="nm">${ch?escapeHtml(ch.name):'(chapitre supprimé)'}<span class="sub">${subj?escapeHtml(subj.name)+' · ':''}${fmtDateShort(s.date)} · ${s.hours}h · ${kindLabel} (${sourceLabel})</span></div>
+      <button class="edit-btn" data-id="${s.id}">Modifier</button>
+      <button class="icon-btn del-btn" data-id="${s.id}" title="Supprimer">${ICON_TRASH}</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.edit-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const s = state.sessions.find(x=>x.id===btn.dataset.id);
+      if(s) openSessionModal(null, {editSession:s});
+    };
+  });
+  el.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(!window.confirm('Supprimer cette session ?')) return;
+      await deleteSessionLog(btn.dataset.id);
+      render();
+    };
+  });
+}
 function openMockModal(){
   document.getElementById('mockModalLabel').value = '';
   document.getElementById('mockModalDate').value = todayStr();
@@ -1943,6 +2148,19 @@ document.getElementById('mockModalSave').onclick = async ()=>{
   document.getElementById('mockModalBackdrop').hidden = true;
   render();
 };
+function renderEloThresholds(){
+  const el = document.getElementById('eloThresholdsList');
+  const currentRank = (state.progress && state.progress.rank) || 'F';
+  el.innerHTML = RANKS.map((r,i)=>{
+    const isCurrent = r===currentRank;
+    return `<div class="settings-row"${isCurrent?' style="background:var(--surface-2);border-radius:8px;padding:6px 8px"':''}>
+      <label style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${RANK_COLORS[i]};display:inline-block"></span>${r} — ${RANK_TITLES[i]}</label>
+      <span class="mono">≥ ${RANK_THRESH[i]}%</span>
+    </div>`;
+  }).join('');
+}
+document.getElementById('eloThresholdsBtn').onclick = ()=>{ renderEloThresholds(); document.getElementById('eloThresholdsBackdrop').hidden = false; };
+document.getElementById('eloThresholdsCloseBtn').onclick = ()=>{ document.getElementById('eloThresholdsBackdrop').hidden = true; };
 async function renderGoalPanel(){
   const el = document.getElementById('goalPanel');
   if(!el) return;
@@ -2020,6 +2238,7 @@ function render(){
   try{ renderRiskBanner(); }catch(e){ console.error('renderRiskBanner',e); }
   try{ renderBadges(); }catch(e){ console.error('renderBadges',e); }
   try{ renderMockExamPanel(); }catch(e){ console.error('renderMockExamPanel',e); }
+  try{ renderSessionHistory(); }catch(e){ console.error('renderSessionHistory',e); }
   try{ renderGoalPanel(); }catch(e){ console.error('renderGoalPanel',e); }
   try{ renderOrphanPanel(); }catch(e){ console.error('renderOrphanPanel',e); }
   try{ if(state.currentPage==='planning'){ renderWeek(); renderExamPanel(); } }catch(e){ console.error('renderWeek',e); }
