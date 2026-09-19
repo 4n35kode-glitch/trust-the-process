@@ -318,6 +318,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
               <div class="panel-head"><h2 id="planTitle">Aujourd'hui</h2><button class="btn-ghost" id="bonusSessionBtn" style="font-size:11.5px;padding:6px 10px">+ Session bonus</button></div>
               <div id="planBanner"></div>
               <div class="plan-list" id="planList"></div>
+              <div id="dayOverrideControl" style="margin-top:12px"></div>
             </div>
             <div class="panel">
               <div class="panel-head"><h2>Matières en un clin d'œil</h2></div>
@@ -460,7 +461,16 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       <label>Heures passées</label>
       <input type="number" id="modalHours" step="0.25" min="0" placeholder="1.5">
     </div>
-    <div class="field">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-muted);margin-bottom:10px"><input type="checkbox" id="modalBonusCheck"> Session bonus (en plus du planning prévu)</label>
+    <div class="field" id="bonusTypeField" hidden>
+      <label>Type d'activité (un seul à la fois)</label>
+      <div class="subject-select-row" id="bonusTypeRow">
+        <button class="active" data-type="revision">Révision</button>
+        <button data-type="qcm">QCM</button>
+        <button data-type="feynman">Feynman</button>
+      </div>
+    </div>
+    <div class="field" id="feelField">
       <label>Ressenti</label>
       <div class="feel-row" id="modalFeel">
         <button data-v="1">1</button>
@@ -488,7 +498,6 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       </div>
       <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-muted);margin-top:4px"><span>Confus</span><span>Limpide</span></div>
     </div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-muted);margin-bottom:6px"><input type="checkbox" id="modalBonusCheck"> Session bonus (en plus du planning prévu)</label>
     <div class="modal-actions">
       <button class="btn-ghost" id="modalDeleteBtn" hidden style="color:var(--red);border-color:var(--red);margin-right:auto">Supprimer</button>
       <button class="btn-ghost" id="modalCancel">Annuler</button>
@@ -738,16 +747,24 @@ function getStaleSubjectIds(dateStr){
   result.sort((a,b)=>b.daysSince-a.daysSince);
   return result.map(r=>r.id);
 }
-function buildPlan(dateStr, excludeIds){
+function buildPlan(dateStr, excludeIds, overrideSubjectId){
   excludeIds = excludeIds || new Set();
   const period = getPeriodMode(dateStr);
   if(period.mode==='post') return {items:[], note:"Le concours est passé (ou c'est aujourd'hui) — bon courage !", period};
   if(!state.chapters.length) return {items:[], note:null, period};
   const isLight = period.mode==='light';
-  const weekend = isWeekend(dateStr);
-  const isFriday = new Date(dateStr+'T00:00:00').getDay()===5;
+  const dow = new Date(dateStr+'T00:00:00').getDay();
+  const isSunday = dow===0;
+  const isSaturday = dow===6;
+  const isFriday = dow===5;
+  const weekend = isSaturday || isSunday;
 
-  const dueCandidates = state.chapters.filter(c=>!c.archived && !loggedToday(c,dateStr) && !excludeIds.has(c.id) && isDue(c,dateStr));
+  if(isSunday && !isLight && !overrideSubjectId){
+    return {items:[], note:"Dimanche : jour de repos par défaut. Choisis une matière ci-dessous si tu veux réviser quand même.", period, reasons:{}, sundayRest:true};
+  }
+
+  let dueCandidates = state.chapters.filter(c=>!c.archived && !loggedToday(c,dateStr) && !excludeIds.has(c.id) && isDue(c,dateStr));
+  if(overrideSubjectId) dueCandidates = dueCandidates.filter(c=>c.subjectId===overrideSubjectId);
 
   let slotCount;
   if(isLight) slotCount = 2;
@@ -756,7 +773,8 @@ function buildPlan(dateStr, excludeIds){
   else slotCount = 2;
 
   const newLimit = isLight ? 0 : computeNewPerDayLimit();
-  const introCandidates = pickIntroductionCandidates(dateStr, newLimit, excludeIds);
+  let introCandidates = pickIntroductionCandidates(dateStr, newLimit, excludeIds);
+  if(overrideSubjectId) introCandidates = introCandidates.filter(c=>c.subjectId===overrideSubjectId);
 
   const pool = [];
   for(const ch of dueCandidates){
@@ -772,7 +790,7 @@ function buildPlan(dateStr, excludeIds){
   const chosen = [];
   const chosenSubjects = new Set();
   const reasons = {};
-  const staleIds = getStaleSubjectIds(dateStr);
+  const staleIds = overrideSubjectId ? [] : getStaleSubjectIds(dateStr);
   for(const subjId of staleIds){
     if(chosen.length>=slotCount) break;
     if(chosenSubjects.has(subjId)) continue;
@@ -784,7 +802,7 @@ function buildPlan(dateStr, excludeIds){
   }
   for(const p of pool){
     if(chosen.length>=slotCount) break;
-    if(chosenSubjects.has(p.ch.subjectId)) continue;
+    if(!overrideSubjectId && chosenSubjects.has(p.ch.subjectId)) continue;
     if(chosen.some(c=>c.id===p.ch.id)) continue;
     chosen.push(p.ch); chosenSubjects.add(p.ch.subjectId);
     reasons[p.ch.id] = explainPoolPick(p, dateStr);
@@ -799,7 +817,11 @@ function buildPlan(dateStr, excludeIds){
   }
 
   let note = null;
-  if(isLight) note = 'Semaine de révision légère avant le concours : pas de nouveau contenu, on consolide.';
+  if(overrideSubjectId){
+    const subj = state.config.subjects.find(s=>s.id===overrideSubjectId);
+    note = `Matière choisie manuellement : ${subj?subj.name:''}. Le reste du planning automatique n'est pas pénalisé, il reprendra demain.`;
+  }
+  else if(isLight) note = 'Semaine de révision légère avant le concours : pas de nouveau contenu, on consolide.';
   else if(weekend) note = `Session de consolidation du week-end (${slotCount} chapitres) — priorité aux points fragiles.`;
   else if(isFriday) note = 'Vendredi allégé (1 chapitre) pour souffler avant le week-end.';
   else if(period.mode==='consolidation') note = 'Phase de consolidation (après ta date cible).';
@@ -832,6 +854,8 @@ function qualityTier(solidity){
   return 'good';
 }
 const BONUS_SCHEDULE_IMPACT = 0.2;
+const BONUS_XP_MULTIPLIER = 0.3;
+const DAILY_ROLLING_CAP = 160;
 function applySessionToSrs(ch, date, solidity, easeBoost, scheduleImpact){
   easeBoost = easeBoost || 1;
   scheduleImpact = scheduleImpact==null ? 1 : scheduleImpact;
@@ -1076,13 +1100,12 @@ async function setDailyDoc(dateStr, data){
   state.daily[dateStr] = data;
   await setDoc(doc(fs,'users',currentUid,'daily',dateStr), data);
 }
-async function ensurePlanPersisted(dateStr, plan){
-  let doc = await getDailyDoc(dateStr);
-  if(doc && doc.plannedChapterIds) return doc;
-  doc = doc || {date:dateStr};
+async function persistDailyPlan(dateStr, plan, overrideSubjectId){
+  let doc = await getDailyDoc(dateStr) || {date:dateStr};
   doc.plannedChapterIds = plan.items.map(c=>c.id);
   doc.reasons = plan.reasons || {};
   doc.mode = plan.period ? plan.period.mode : 'learning';
+  doc.dayOverrideSubjectId = overrideSubjectId || null;
   doc.generatedAt = new Date().toISOString();
   doc.loggedChapterIds = doc.loggedChapterIds || [];
   doc.sessionXpSum = doc.sessionXpSum || 0;
@@ -1095,22 +1118,42 @@ async function ensurePlanPersisted(dateStr, plan){
   }
   return doc;
 }
+async function ensurePlanPersisted(dateStr, plan, overrideSubjectId){
+  const existing = await getDailyDoc(dateStr);
+  if(existing && existing.plannedChapterIds) return existing;
+  return persistDailyPlan(dateStr, plan, overrideSubjectId);
+}
+async function setDayOverride(subjectId){
+  const today = todayStr();
+  const plan = buildPlan(today, new Set(), subjectId);
+  await persistDailyPlan(today, plan, subjectId);
+  render();
+}
+async function clearDayOverride(){
+  const today = todayStr();
+  const plan = buildPlan(today, new Set(), null);
+  await persistDailyPlan(today, plan, null);
+  render();
+}
 async function settleDailyAdherence(){
   const today = todayStr();
   const dates = Object.keys(state.daily).filter(d=>d<today);
   for(const d of dates){
     const doc = state.daily[d];
     if(!doc || doc.adherenceProcessed || !doc.plannedChapterIds) continue;
-    const planned = doc.plannedChapterIds.length;
-    const done = (doc.loggedChapterIds||[]).length;
+    const planned = doc.plannedChapterIds;
+    const realLogged = new Set(state.sessions.filter(s=>s.date===d && s.kind!=='bonus').map(s=>s.chapterId));
+    const doneCount = planned.filter(id=>realLogged.has(id)).length;
     let bonus = 0;
-    if(planned>0){
-      if(done>=planned) bonus = 6;
-      else if(done>0) bonus = 3;
+    if(planned.length>0){
+      if(doneCount>=planned.length) bonus = 6;
+      else if(doneCount>0) bonus = 3;
       else bonus = -8;
     }
     doc.adherenceProcessed = true;
     doc.bonusXp = bonus;
+    const daySessions = state.sessions.filter(s=>s.date===d);
+    doc.sessionXpSum = daySessions.reduce((a,s)=>a+(s.xp||0),0) + bonus + (doc.mockXp||0);
     await setDailyDoc(d, doc);
   }
 }
@@ -1164,12 +1207,12 @@ function subjectRiskLevel(subjectId){
 function computeStreak(){
   let streak = 0;
   let d = todayStr();
-  const todayDoc = state.daily[d];
-  if(!todayDoc || !(todayDoc.loggedChapterIds||[]).length) d = addDays(d,-1);
-  while(true){
+  for(let i=0;i<120;i++){
     const doc = state.daily[d];
-    if(doc && (doc.loggedChapterIds||[]).length>0){ streak++; d = addDays(d,-1); }
-    else break;
+    if(!doc || !doc.plannedChapterIds || !doc.plannedChapterIds.length){ d = addDays(d,-1); continue; }
+    const realLogged = new Set(state.sessions.filter(s=>s.date===d && s.kind!=='bonus').map(s=>s.chapterId));
+    const done = doc.plannedChapterIds.every(id=>realLogged.has(id));
+    if(done){ streak++; d = addDays(d,-1); } else break;
   }
   return streak;
 }
@@ -1234,7 +1277,7 @@ async function recordProgressSnapshot(){
   for(const d of window_){
     if(state.config?.startedAt && d < state.config.startedAt) continue;
     const doc = await getDailyDoc(d);
-    if(doc){ sum += (doc.sessionXpSum||0) + (doc.bonusXp||0); }
+    if(doc){ sum += clamp(doc.sessionXpSum||0, -20, DAILY_ROLLING_CAP); }
     count++;
   }
   const avgPerDay = count ? sum/count : 0;
@@ -1242,7 +1285,7 @@ async function recordProgressSnapshot(){
   let rank = RANKS[0];
   for(let i=RANK_THRESH.length-1;i>=0;i--){ if(rollingPct>=RANK_THRESH[i]){ rank = RANKS[i]; break; } }
   let totalXp = 0;
-  for(const d of Object.keys(state.daily)){ const doc=state.daily[d]; totalXp += (doc.sessionXpSum||0)+(doc.bonusXp||0); }
+  for(const d of Object.keys(state.daily)){ const doc=state.daily[d]; totalXp += (doc.sessionXpSum||0); }
   const progress = state.progress || {history:[]};
   progress.totalXp = totalXp; progress.rollingPct = rollingPct; progress.rank = rank;
   state.progress = progress;
@@ -1326,7 +1369,8 @@ function replayChapterFromSessions(ch){
     applySessionToSrs(ch, s.date, solidity, s.easeBoost||1, impact);
     const masteryPct = computeMastery(ch);
     ch.history.push({date:s.date, masteryPct, qcmAvg});
-    s.xp = computeSessionXp(masteryPct, s.hours||0.1);
+    const rawXp = computeSessionXp(masteryPct, s.hours||0.1);
+    s.xp = s.kind==='bonus' ? Math.round(rawXp*BONUS_XP_MULTIPLIER) : rawXp;
   }
 }
 async function persistSessionXp(sessions){
@@ -1535,26 +1579,27 @@ function renderHero(){
   }
 }
 
-function renderPlan(){
+async function renderPlan(){
   const today = todayStr();
-  const plan = buildPlan(today);
-  ensurePlanPersisted(today, plan).then(doc=>{
-    const bannerEl = document.getElementById('planBanner');
-    bannerEl.innerHTML='';
-    if(plan.note){
-      const b = document.createElement('div');
-      b.className = 'banner ' + (plan.period && plan.period.mode==='light' ? 'warn' : 'info');
-      b.textContent = plan.note;
-      bannerEl.appendChild(b);
-    }
-    const list = document.getElementById('planList');
-    list.innerHTML = '';
-    const ids = doc.plannedChapterIds && doc.plannedChapterIds.length ? doc.plannedChapterIds : plan.items.map(c=>c.id);
-    const items = ids.map(id=>state.chapters.find(c=>c.id===id)).filter(Boolean);
-    if(!items.length){
-      list.innerHTML = '<div class="plan-empty">Rien de planifié — ajoute des chapitres dans une matière pour démarrer.</div>';
-      return;
-    }
+  const existingDoc = await getDailyDoc(today);
+  const overrideId = existingDoc && existingDoc.dayOverrideSubjectId ? existingDoc.dayOverrideSubjectId : null;
+  const plan = buildPlan(today, new Set(), overrideId);
+  const doc = await ensurePlanPersisted(today, plan, overrideId);
+  const bannerEl = document.getElementById('planBanner');
+  bannerEl.innerHTML='';
+  if(plan.note){
+    const b = document.createElement('div');
+    b.className = 'banner ' + (plan.sundayRest || (plan.period && plan.period.mode==='light') ? 'warn' : 'info');
+    b.textContent = plan.note;
+    bannerEl.appendChild(b);
+  }
+  const list = document.getElementById('planList');
+  list.innerHTML = '';
+  const ids = doc.plannedChapterIds && doc.plannedChapterIds.length ? doc.plannedChapterIds : plan.items.map(c=>c.id);
+  const items = ids.map(id=>state.chapters.find(c=>c.id===id)).filter(Boolean);
+  if(!items.length){
+    list.innerHTML = '<div class="plan-empty">Rien de planifié — ajoute des chapitres dans une matière pour démarrer.</div>';
+  } else {
     for(const ch of items){
       const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
       const lvl = masteryLevel(ch);
@@ -1575,7 +1620,24 @@ function renderPlan(){
       row.querySelector('button').onclick = ()=>openSessionModal(ch.id);
       list.appendChild(row);
     }
-  });
+  }
+  renderDayOverrideControl(doc);
+}
+function renderDayOverrideControl(doc){
+  const el = document.getElementById('dayOverrideControl');
+  if(!el) return;
+  if(doc.dayOverrideSubjectId){
+    const subj = state.config.subjects.find(s=>s.id===doc.dayOverrideSubjectId);
+    el.innerHTML = `<div class="settings-note">Matière choisie manuellement aujourd'hui : ${subj?escapeHtml(subj.name):''}. <button class="btn-ghost" id="clearOverrideBtn" style="margin-left:6px;padding:4px 9px;font-size:11px">Revenir au planning automatique</button></div>`;
+    document.getElementById('clearOverrideBtn').onclick = clearDayOverride;
+  } else {
+    const opts = state.config.subjects.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    el.innerHTML = `<div class="chapter-add"><select id="overrideSubjectSelect">${opts}</select><button id="applyOverrideBtn">Réviser cette matière à la place</button></div>`;
+    document.getElementById('applyOverrideBtn').onclick = ()=>{
+      const sel = document.getElementById('overrideSubjectSelect');
+      if(sel.value) setDayOverride(sel.value);
+    };
+  }
 }
 
 function subjectCardHtml(subj){
@@ -1905,12 +1967,37 @@ function openSessionModal(chapterId, opts){
   document.getElementById('modalQcmTotal').value = (es && es.qcm) ? es.qcm.total : '';
   document.getElementById('feynmanRow').hidden = !(es && es.feynman);
   document.querySelectorAll('#modalFeynman button').forEach(b=>{ b.classList.toggle('active', es && es.feynman && String(b.dataset.v)===String(es.feynman.clarity)); });
-  document.getElementById('modalBonusCheck').checked = es ? es.kind==='bonus' : !!opts.bonus;
+  const isBonus = es ? es.kind==='bonus' : !!opts.bonus;
+  document.getElementById('modalBonusCheck').checked = isBonus;
+  let bonusType = 'revision';
+  if(es && es.kind==='bonus'){ bonusType = es.qcm ? 'qcm' : (es.feynman ? 'feynman' : 'revision'); }
+  document.querySelectorAll('#bonusTypeRow button').forEach(b=>b.classList.toggle('active', b.dataset.type===bonusType));
   modalSource = es ? (es.source||'manual') : (opts.source || 'manual');
+  updateModalBonusVisibility();
   document.getElementById('modalBackdrop').hidden = false;
+}
+function updateModalBonusVisibility(){
+  const isBonus = document.getElementById('modalBonusCheck').checked;
+  document.getElementById('bonusTypeField').hidden = !isBonus;
+  if(!isBonus){
+    document.getElementById('feelField').hidden = false;
+    document.getElementById('toggleQcm').hidden = false;
+    document.getElementById('toggleFeynman').hidden = false;
+    return;
+  }
+  document.getElementById('toggleQcm').hidden = true;
+  document.getElementById('toggleFeynman').hidden = true;
+  const type = (document.querySelector('#bonusTypeRow button.active')||{}).dataset?.type || 'revision';
+  document.getElementById('feelField').hidden = type!=='revision';
+  document.getElementById('qcmRow').hidden = type!=='qcm';
+  document.getElementById('feynmanRow').hidden = type!=='feynman';
 }
 document.getElementById('modalCancel').onclick = ()=>{ document.getElementById('modalBackdrop').hidden = true; };
 document.getElementById('bonusSessionBtn').onclick = ()=> openSessionModal(null, {bonus:true});
+document.getElementById('modalBonusCheck').onchange = updateModalBonusVisibility;
+document.querySelectorAll('#bonusTypeRow button').forEach(b=>{
+  b.onclick = ()=>{ document.querySelectorAll('#bonusTypeRow button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); updateModalBonusVisibility(); };
+});
 document.getElementById('toggleQcm').onclick = ()=>{ document.getElementById('qcmRow').hidden = !document.getElementById('qcmRow').hidden; };
 document.getElementById('toggleFeynman').onclick = ()=>{ document.getElementById('feynmanRow').hidden = !document.getElementById('feynmanRow').hidden; };
 document.querySelectorAll('#modalFeel button').forEach(b=>{
@@ -1920,16 +2007,37 @@ document.querySelectorAll('#modalFeynman button').forEach(b=>{
   b.onclick = ()=>{ document.querySelectorAll('#modalFeynman button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); };
 });
 document.getElementById('modalSave').onclick = async ()=>{
-  const feelBtn = document.querySelector('#modalFeel button.active');
   const date = document.getElementById('modalDate').value || todayStr();
   const hours = document.getElementById('modalHours').value;
-  const feeling = feelBtn ? feelBtn.dataset.v : null;
-  if(!feeling || !hours){ return; }
-  const qcmTotal = document.getElementById('qcmRow').hidden ? null : document.getElementById('modalQcmTotal').value;
-  const qcmCorrect = document.getElementById('modalQcmCorrect').value;
-  const feynBtn = document.querySelector('#modalFeynman button.active');
-  const feynmanClarity = document.getElementById('feynmanRow').hidden ? null : (feynBtn ? feynBtn.dataset.v : null);
+  if(!hours){ return; }
   const kind = document.getElementById('modalBonusCheck').checked ? 'bonus' : 'session';
+  const bonusType = (document.querySelector('#bonusTypeRow button.active')||{}).dataset?.type || 'revision';
+  let feeling=null, qcmCorrect=null, qcmTotal=null, feynmanClarity=null;
+  if(kind==='bonus'){
+    if(bonusType==='qcm'){
+      qcmTotal = document.getElementById('modalQcmTotal').value;
+      qcmCorrect = document.getElementById('modalQcmCorrect').value;
+      if(!qcmTotal) return;
+      feeling = String(clamp(Math.round(1+4*((Number(qcmCorrect)||0)/(Number(qcmTotal)||1))),1,5));
+    } else if(bonusType==='feynman'){
+      const feynBtn = document.querySelector('#modalFeynman button.active');
+      feynmanClarity = feynBtn ? feynBtn.dataset.v : null;
+      if(!feynmanClarity) return;
+      feeling = feynmanClarity;
+    } else {
+      const feelBtn = document.querySelector('#modalFeel button.active');
+      feeling = feelBtn ? feelBtn.dataset.v : null;
+      if(!feeling) return;
+    }
+  } else {
+    const feelBtn = document.querySelector('#modalFeel button.active');
+    feeling = feelBtn ? feelBtn.dataset.v : null;
+    if(!feeling) return;
+    qcmTotal = document.getElementById('qcmRow').hidden ? null : document.getElementById('modalQcmTotal').value;
+    qcmCorrect = document.getElementById('modalQcmCorrect').value;
+    const feynBtn = document.querySelector('#modalFeynman button.active');
+    feynmanClarity = document.getElementById('feynmanRow').hidden ? null : (feynBtn ? feynBtn.dataset.v : null);
+  }
   if(editingSessionId){
     await updateSessionLog(editingSessionId, {chapterId: modalChapterId, date, hours, feeling, qcmCorrect, qcmTotal, feynmanClarity, kind});
   } else {
