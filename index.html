@@ -132,6 +132,17 @@ main{flex:1;max-width:1180px;width:100%;margin:0 auto;padding:24px 24px 90px}
 .plan-empty{color:var(--ink-muted);font-size:13px;padding:8px 0}
 
 .week-grid{display:grid;gap:10px}
+.month-wd-row{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+.month-wd{text-align:center;font-family:'Rajdhani';font-size:11px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.05em}
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.month-cell{position:relative;min-height:58px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);padding:5px;display:flex;flex-direction:column;gap:3px}
+.month-cell.empty{border:none;background:none}
+.month-cell.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.mc-num{font-family:'JetBrains Mono';font-size:11px;color:var(--ink-muted)}
+.mc-count{font-family:'JetBrains Mono';font-size:11px;color:var(--accent);font-weight:700}
+.mc-badge{font-size:9px;padding:1px 5px;border-radius:999px;background:var(--warm);color:var(--warm-ink);width:fit-content;font-weight:700}
+.mc-badge.done{opacity:.55}
+.mc-badge.mock{background:var(--legendary);color:var(--legendary-ink)}
 .day-card{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface-2)}
 .day-card.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .day-card .dh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
@@ -272,6 +283,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       <button class="nav-btn" data-page="matieres"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v16H5.5C4.7 20 4 19.3 4 18.5zM20 5.5c0-.8-.7-1.5-1.5-1.5H13v16h5.5c.8 0 1.5-.7 1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>Matières</button>
       <button class="nav-btn" data-page="progression"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 15l4-4 3 3 5-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Progression</button>
       <button class="nav-btn" data-page="minuteur"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Minuteur</button>
+      <button class="nav-btn" data-page="rendement"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>Rendement</button>
       <button class="nav-btn" data-page="parametres"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5v2.4M12 18.1v2.4M20.5 12h-2.4M5.9 12H3.5M17.7 6.3l-1.7 1.7M8 16l-1.7 1.7M17.7 17.7L16 16M8 8 6.3 6.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>Paramètres</button>
       <div class="spacer"></div>
       <button class="theme-btn" id="themeBtnDesktop"><span class="ic" id="themeIconDesktop"></span><span id="themeLabelDesktop">Thème sombre</span></button>
@@ -298,6 +310,11 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
                 <div class="classement-box" id="classementBox"></div>
               </div>
             </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>Aujourd'hui en un coup d'œil</h2></div>
+            <div id="todayGlance"></div>
           </div>
 
           <div class="panel" id="riskBannerWrap" hidden>
@@ -337,6 +354,15 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
           <div class="panel">
             <div class="panel-head"><h2>Cette semaine</h2></div>
             <div class="week-grid" id="weekGrid"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Vue du mois</h2></div>
+            <div id="monthCalendar"></div>
+            <div class="chart-legend" style="margin-top:10px">
+              <span><i style="background:var(--accent)"></i>chapitres prévus/faits</span>
+              <span><i style="background:var(--warm)"></i>bilan hebdomadaire (samedi)</span>
+              <span><i style="background:var(--legendary)"></i>concours blanc</span>
+            </div>
           </div>
         </section>
 
@@ -391,6 +417,13 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
           </div>
         </section>
 
+        <section class="page" data-page="rendement" hidden>
+          <div class="panel">
+            <div class="panel-head"><h2>Analyse de rendement</h2></div>
+            <div id="performancePanel"></div>
+          </div>
+        </section>
+
         <section class="page" data-page="parametres" hidden>
           <div class="panel">
             <div class="panel-head"><h2>Paramètres</h2></div>
@@ -419,6 +452,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       <button data-page="matieres"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v16H5.5C4.7 20 4 19.3 4 18.5zM20 5.5c0-.8-.7-1.5-1.5-1.5H13v16h5.5c.8 0 1.5-.7 1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>Matières</button>
       <button data-page="progression"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 15l4-4 3 3 5-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Progrès</button>
       <button data-page="minuteur"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Minuteur</button>
+      <button data-page="rendement"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>Rendement</button>
       <button data-page="parametres"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5v2.4M12 18.1v2.4M20.5 12h-2.4M5.9 12H3.5M17.7 6.3l-1.7 1.7M8 16l-1.7 1.7M17.7 17.7L16 16M8 8 6.3 6.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>Réglages</button>
     </nav>
   </div>
@@ -776,16 +810,13 @@ function buildPlan(dateStr, excludeIds, overrideSubjectId){
   const isFriday = dow===5;
   const weekend = isSaturday || isSunday;
 
-  if(isSunday && !isLight && !overrideSubjectId){
-    return {items:[], note:"Dimanche : jour de repos par défaut. Choisis une matière ci-dessous si tu veux réviser quand même.", period, reasons:{}, sundayRest:true};
-  }
-
   let dueCandidates = state.chapters.filter(c=>!c.archived && !loggedToday(c,dateStr) && !excludeIds.has(c.id) && isDue(c,dateStr));
   if(overrideSubjectId) dueCandidates = dueCandidates.filter(c=>c.subjectId===overrideSubjectId);
 
   let slotCount;
   if(isLight) slotCount = 2;
-  else if(weekend) slotCount = 3;
+  else if(isSunday) slotCount = 3;
+  else if(isSaturday) slotCount = 2;
   else if(isFriday) slotCount = 1;
   else slotCount = 2;
 
@@ -1525,7 +1556,8 @@ function setPage(name){
   document.querySelectorAll('.page').forEach(p=>{ p.hidden = p.dataset.page !== name; });
   document.querySelectorAll('.nav-btn, .bottomnav button').forEach(b=>{ b.classList.toggle('active', b.dataset.page===name); });
   location.hash = name;
-  if(name==='planning'){ renderWeek(); renderExamPanel(); }
+  if(name==='planning'){ renderWeek(); renderMonthCalendar(); renderExamPanel(); }
+  if(name==='rendement') renderPerformancePage();
 }
 document.querySelectorAll('.nav-btn, .bottomnav button').forEach(b=>{ b.addEventListener('click', ()=>setPage(b.dataset.page)); });
 window.addEventListener('hashchange', ()=>{ const p=location.hash.replace('#',''); if(p) setPage(p); });
@@ -1855,6 +1887,105 @@ function renderWeek(){
     card.innerHTML = `<div class="dh"><span class="d hud">${fmtWeekday(d)} ${fmtDateShort(d)}</span><span class="m">${labelMap[period.mode]||''}</span></div><div class="day-chip-row">${chipsHtml}</div>`;
     grid.appendChild(card);
   }
+}
+function renderMonthCalendar(){
+  const el = document.getElementById('monthCalendar');
+  if(!el) return;
+  const today = todayStr();
+  const todayD = new Date(today+'T00:00:00');
+  const year = todayD.getFullYear(), month = todayD.getMonth();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const firstDow = new Date(year, month, 1).getDay();
+  const offset = firstDow===0 ? 6 : firstDow-1;
+  const usedInPreview = new Set();
+  let cells = '';
+  for(let i=0;i<offset;i++) cells += '<div class="month-cell empty"></div>';
+  for(let day=1; day<=daysInMonth; day++){
+    const dStr = toISO(new Date(year, month, day));
+    const isToday = dStr===today;
+    const isPastOrToday = dStr<=today;
+    let count=0, doneCount=0;
+    const doc = state.daily[dStr];
+    if(doc && doc.plannedChapterIds){
+      count = doc.plannedChapterIds.length;
+      doneCount = (doc.loggedChapterIds||[]).length;
+    } else if(!isPastOrToday){
+      const plan = buildPlan(dStr, usedInPreview);
+      count = plan.items.length;
+      plan.items.forEach(c=>usedInPreview.add(c.id));
+    }
+    const wk = weekMonday(dStr);
+    const exam = state.exams[wk];
+    const isSaturday = new Date(dStr+'T00:00:00').getDay()===6;
+    const hasMock = (state.mockExams||[]).some(m=>m.date===dStr);
+    cells += `<div class="month-cell${isToday?' today':''}">
+      <div class="mc-num">${day}</div>
+      ${count?`<div class="mc-count">${doneCount}/${count}</div>`:''}
+      ${(isSaturday && exam && exam.coveredChapterIds && exam.coveredChapterIds.length) ? `<div class="mc-badge${exam.date?' done':''}">Bilan</div>` : ''}
+      ${hasMock?'<div class="mc-badge mock">CB</div>':''}
+    </div>`;
+  }
+  el.innerHTML = `<div class="month-wd-row">${['L','M','M','J','V','S','D'].map(w=>`<div class="month-wd">${w}</div>`).join('')}</div><div class="month-grid">${cells}</div>`;
+}
+function computePerformanceInsights(){
+  const sessions = (state.sessions||[]).filter(s=>s.kind!=='exam' && s.createdAt);
+  if(sessions.length<4) return null;
+  const todLabels = {matin:'Matin (5h-12h)', apresmidi:'Après-midi (12h-18h)', soir:'Soir (18h-23h)', nuit:'Nuit (23h-5h)'};
+  const todBuckets = {matin:[], apresmidi:[], soir:[], nuit:[]};
+  const dowLabels = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  const dowBuckets = {0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
+  for(const s of sessions){
+    const hour = new Date(s.createdAt).getHours();
+    let key;
+    if(hour>=5 && hour<12) key='matin';
+    else if(hour>=12 && hour<18) key='apresmidi';
+    else if(hour>=18 && hour<23) key='soir';
+    else key='nuit';
+    todBuckets[key].push(s.xp||0);
+    const dow = new Date(s.date+'T00:00:00').getDay();
+    dowBuckets[dow].push(s.xp||0);
+  }
+  const avg = arr => arr.length ? Math.round((arr.reduce((a,b)=>a+b,0)/arr.length)*10)/10 : null;
+  const todEntries = Object.keys(todBuckets).map(k=>({key:k, label:todLabels[k], avg:avg(todBuckets[k]), count:todBuckets[k].length})).filter(e=>e.count>=2);
+  const dowEntries = Object.keys(dowBuckets).map(k=>({key:k, label:dowLabels[k], avg:avg(dowBuckets[k]), count:dowBuckets[k].length})).filter(e=>e.count>=2);
+  todEntries.sort((a,b)=>b.avg-a.avg);
+  dowEntries.sort((a,b)=>b.avg-a.avg);
+  return {todEntries, dowEntries, totalSessions:sessions.length};
+}
+function renderBarList(entries, maxLabel){
+  if(!entries.length) return '<div class="empty-note">Pas encore assez de données distinctes sur ce critère.</div>';
+  const max = Math.max(...entries.map(e=>e.avg), 1);
+  return entries.map(e=>`
+    <div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${escapeHtml(e.label)}</span><span class="mono">${e.avg} Elo/session · ${e.count} session${e.count>1?'s':''}</span></div>
+      <div class="bar"><i style="width:${Math.max(4,(e.avg/max)*100)}%;background:var(--accent)"></i></div>
+    </div>`).join('');
+}
+function renderPerformancePage(){
+  const el = document.getElementById('performancePanel');
+  if(!el) return;
+  const insights = computePerformanceInsights();
+  if(!insights){
+    el.innerHTML = '<div class="empty-note">Pas encore assez de sessions loguées (au moins 4, avec plusieurs par créneau) pour dégager une tendance fiable. Reviens dès que tu as un peu plus d\'historique.</div>';
+    return;
+  }
+  let callout = '';
+  const bestTod = insights.todEntries[0];
+  const bestDow = insights.dowEntries[0];
+  if(bestTod || bestDow){
+    const parts = [];
+    if(bestTod) parts.push(`le créneau <b>${escapeHtml(bestTod.label)}</b> (${bestTod.avg} Elo/session en moyenne)`);
+    if(bestDow) parts.push(`le <b>${escapeHtml(bestDow.label)}</b> (${bestDow.avg} Elo/session en moyenne)`);
+    callout = `<div class="banner info">D'après tes ${insights.totalSessions} dernières sessions, tu es le plus efficace sur ${parts.join(' et ')}.</div>`;
+  }
+  el.innerHTML = `
+    ${callout}
+    <h3 class="hud" style="margin:16px 0 10px;font-size:14px">Par moment de la journée</h3>
+    ${renderBarList(insights.todEntries)}
+    <h3 class="hud" style="margin:20px 0 10px;font-size:14px">Par jour de la semaine</h3>
+    ${renderBarList(insights.dowEntries)}
+    <div class="settings-note" style="margin-top:14px">Basé sur l'Elo moyen obtenu par session (qui combine ton % de maîtrise et ton efficacité temps/résultat), croisé avec l'heure et le jour où chaque session a été loguée.</div>
+  `;
 }
 
 function renderProgressChart(){
@@ -2374,6 +2505,37 @@ function renderOrphanPanel(){
   }).join('');
   el.querySelectorAll('.log-btn').forEach(btn=>{ btn.onclick = ()=>openSessionModal(btn.dataset.ch); });
 }
+async function renderTodayGlance(){
+  const el = document.getElementById('todayGlance');
+  if(!el) return;
+  const today = todayStr();
+  const doc = state.daily[today];
+  const ids = doc && doc.plannedChapterIds ? doc.plannedChapterIds : [];
+  const items = ids.map(id=>state.chapters.find(c=>c.id===id)).filter(Boolean);
+  let html = '';
+  if(!items.length){
+    html += '<div class="empty-note">Rien de planifié pour l\'instant.</div>';
+  } else {
+    html += '<div class="day-chip-row">' + items.map(ch=>{
+      const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
+      const lvl = masteryLevel(ch);
+      return `<span class="day-chip ${loggedToday(ch,today)?'done':''}"><span class="dot ${lvl.level}" style="margin-right:4px"></span>${subj?escapeHtml(subj.name)+' — ':''}${escapeHtml(ch.name)}</span>`;
+    }).join('') + '</div>';
+  }
+  if(isWeekend(today)){
+    const exam = await getOrCreateWeeklyExam(today);
+    if(exam && exam.coveredChapterIds && exam.coveredChapterIds.length){
+      html += exam.date
+        ? `<div class="banner info" style="margin-top:10px">Bilan hebdomadaire fait : ${exam.correct}/${exam.total} (${exam.qcmAvg}/20)</div>`
+        : `<div class="banner warn" style="margin-top:10px">Bilan hebdomadaire disponible — direction Planning pour le passer.</div>`;
+    }
+  }
+  const mock = (state.mockExams||[]).find(m=>m.date===today);
+  if(mock){
+    html += `<div class="banner info" style="margin-top:10px">Concours blanc "${escapeHtml(mock.label)}" : ${mock.correct}/${mock.total} (${mock.qcmAvg}/20)</div>`;
+  }
+  el.innerHTML = html;
+}
 function renderPacePanel(){
   const el = document.getElementById('pacePanel');
   if(!el) return;
@@ -2410,6 +2572,7 @@ function render(){
   if(!state.config) state.config = defaultConfig();
   try{ renderHero(); }catch(e){ console.error('renderHero',e); }
   try{ renderPlan(); }catch(e){ console.error('renderPlan',e); }
+  try{ renderTodayGlance(); }catch(e){ console.error('renderTodayGlance',e); }
   try{ renderMiniSubjects(); }catch(e){ console.error('renderMiniSubjects',e); }
   try{ renderSubjects(); }catch(e){ console.error('renderSubjects',e); }
   try{ renderSubjectDetail(); }catch(e){ console.error('renderSubjectDetail',e); }
@@ -2422,7 +2585,8 @@ function render(){
   try{ renderSessionHistory(); }catch(e){ console.error('renderSessionHistory',e); }
   try{ renderGoalPanel(); }catch(e){ console.error('renderGoalPanel',e); }
   try{ renderOrphanPanel(); }catch(e){ console.error('renderOrphanPanel',e); }
-  try{ if(state.currentPage==='planning'){ renderWeek(); renderExamPanel(); } }catch(e){ console.error('renderWeek',e); }
+  try{ if(state.currentPage==='planning'){ renderWeek(); renderMonthCalendar(); renderExamPanel(); } }catch(e){ console.error('renderWeek',e); }
+  try{ if(state.currentPage==='rendement') renderPerformancePage(); }catch(e){ console.error('renderPerformancePage',e); }
   const note = document.getElementById('storeNote');
   if(note){
     note.textContent = state.userEmail ? `Connecté en tant que ${state.userEmail} · synchronisé via Firebase sur tous tes appareils.` : '';
@@ -2454,7 +2618,7 @@ onAuthStateChanged(auth, async (user)=>{
       subscribeLive();
     }catch(e){ console.error('load failed', e); }
     const initialPage = (location.hash||'#accueil').replace('#','') || 'accueil';
-    setPage(['accueil','planning','matieres','progression','minuteur','parametres'].includes(initialPage) ? initialPage : 'accueil');
+    setPage(['accueil','planning','matieres','progression','minuteur','rendement','parametres'].includes(initialPage) ? initialPage : 'accueil');
     render();
   } else {
     currentUid = null;
