@@ -460,7 +460,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
       <input type="date" id="modalDate">
     </div>
     <div class="field">
-      <label>Heures passées</label>
+      <label id="modalHoursLabel">Heures passées</label>
       <input type="number" id="modalHours" step="0.25" min="0" placeholder="1.5">
     </div>
     <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-muted);margin-bottom:10px"><input type="checkbox" id="modalBonusCheck"> Session bonus (en plus du planning prévu)</label>
@@ -2014,11 +2014,15 @@ function openSessionModal(chapterId, opts){
 }
 function updateModalBonusVisibility(){
   const isBonus = document.getElementById('modalBonusCheck').checked;
+  const hoursLabel = document.getElementById('modalHoursLabel');
+  const hoursInput = document.getElementById('modalHours');
   document.getElementById('bonusTypeField').hidden = !isBonus;
   if(!isBonus){
     document.getElementById('feelField').hidden = false;
     document.getElementById('toggleQcm').hidden = false;
     document.getElementById('toggleFeynman').hidden = false;
+    hoursLabel.textContent = 'Heures passées';
+    hoursInput.placeholder = '1.5';
     return;
   }
   document.getElementById('toggleQcm').hidden = true;
@@ -2027,6 +2031,9 @@ function updateModalBonusVisibility(){
   document.getElementById('feelField').hidden = type!=='revision';
   document.getElementById('qcmRow').hidden = type!=='qcm';
   document.getElementById('feynmanRow').hidden = type!=='feynman';
+  if(type==='qcm'){ hoursLabel.textContent = 'Durée du QCM (optionnel)'; hoursInput.placeholder = '0.25'; }
+  else if(type==='feynman'){ hoursLabel.textContent = "Durée de l'explication (optionnel)"; hoursInput.placeholder = '0.25'; }
+  else { hoursLabel.textContent = 'Heures passées'; hoursInput.placeholder = '1.5'; }
 }
 document.getElementById('modalCancel').onclick = ()=>{ document.getElementById('modalBackdrop').hidden = true; };
 document.getElementById('bonusSessionBtn').onclick = ()=> openSessionModal(null, {bonus:true});
@@ -2044,10 +2051,11 @@ document.querySelectorAll('#modalFeynman button').forEach(b=>{
 });
 document.getElementById('modalSave').onclick = async ()=>{
   const date = document.getElementById('modalDate').value || todayStr();
-  const hours = document.getElementById('modalHours').value;
-  if(!hours){ return; }
   const kind = document.getElementById('modalBonusCheck').checked ? 'bonus' : 'session';
   const bonusType = (document.querySelector('#bonusTypeRow button.active')||{}).dataset?.type || 'revision';
+  const hoursOptional = kind==='bonus' && (bonusType==='qcm' || bonusType==='feynman');
+  let hours = document.getElementById('modalHours').value;
+  if(!hours){ if(hoursOptional) hours = '0'; else return; }
   let feeling=null, qcmCorrect=null, qcmTotal=null, feynmanClarity=null;
   if(kind==='bonus'){
     if(bonusType==='qcm'){
