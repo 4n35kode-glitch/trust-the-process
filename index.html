@@ -597,7 +597,7 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
 
 <div class="modal-backdrop" id="chapterSwapBackdrop" hidden>
   <div class="modal" style="max-width:380px">
-    <h3>Remplacer ce chapitre</h3>
+    <h3 id="chapterSwapTitle">Remplacer ce chapitre</h3>
     <p class="sub" id="chapterSwapSub"></p>
     <div class="field">
       <label>Chapitre à faire à la place</label>
@@ -810,6 +810,10 @@ function buildPlan(dateStr, excludeIds, overrideSubjectId){
   const isFriday = dow===5;
   const weekend = isSaturday || isSunday;
 
+  if(isFriday && !isLight && !overrideSubjectId){
+    return {items:[], note:"Vendredi : jour de repos par défaut. Choisis un chapitre ci-dessous si tu veux réviser quand même.", period, reasons:{}, restDay:true};
+  }
+
   let dueCandidates = state.chapters.filter(c=>!c.archived && !loggedToday(c,dateStr) && !excludeIds.has(c.id) && isDue(c,dateStr));
   if(overrideSubjectId) dueCandidates = dueCandidates.filter(c=>c.subjectId===overrideSubjectId);
 
@@ -817,7 +821,7 @@ function buildPlan(dateStr, excludeIds, overrideSubjectId){
   if(isLight) slotCount = 2;
   else if(isSunday) slotCount = 3;
   else if(isSaturday) slotCount = 2;
-  else if(isFriday) slotCount = 1;
+  else if(isFriday) slotCount = 2;
   else slotCount = 2;
 
   const newLimit = isLight ? 0 : computeNewPerDayLimit();
@@ -871,7 +875,7 @@ function buildPlan(dateStr, excludeIds, overrideSubjectId){
   }
   else if(isLight) note = 'Semaine de révision légère avant le concours : pas de nouveau contenu, on consolide.';
   else if(weekend) note = `Session de consolidation du week-end (${slotCount} chapitres) — priorité aux points fragiles.`;
-  else if(isFriday) note = 'Vendredi allégé (1 chapitre) pour souffler avant le week-end.';
+  else if(isFriday) note = 'Vendredi choisi manuellement pour réviser quand même.';
   else if(period.mode==='consolidation') note = 'Phase de consolidation (après ta date cible).';
   return {items: chosen, note, period, reasons};
 }
@@ -1664,7 +1668,12 @@ async function renderPlan(){
   const ids = doc.plannedChapterIds && doc.plannedChapterIds.length ? doc.plannedChapterIds : plan.items.map(c=>c.id);
   const items = ids.map(id=>state.chapters.find(c=>c.id===id)).filter(Boolean);
   if(!items.length){
-    list.innerHTML = '<div class="plan-empty">Rien de planifié — ajoute des chapitres dans une matière pour démarrer.</div>';
+    if(state.chapters.length){
+      list.innerHTML = `<div class="plan-empty">Rien de proposé aujourd'hui.</div><button class="btn-ghost" id="addRestDayChapterBtn" style="margin-top:8px">+ Choisir un chapitre à réviser quand même</button>`;
+      document.getElementById('addRestDayChapterBtn').onclick = ()=>openChapterSwap(null);
+    } else {
+      list.innerHTML = '<div class="plan-empty">Rien de planifié — ajoute des chapitres dans une matière pour démarrer.</div>';
+    }
   } else {
     for(const ch of items){
       const subj = state.config.subjects.find(s=>s.id===ch.subjectId);
@@ -2447,8 +2456,12 @@ document.getElementById('eloThresholdsCloseBtn').onclick = ()=>{ document.getEle
 let chapterSwapOldId = null;
 function openChapterSwap(oldChapterId){
   chapterSwapOldId = oldChapterId;
-  const oldCh = state.chapters.find(c=>c.id===oldChapterId);
-  document.getElementById('chapterSwapSub').textContent = oldCh ? `À la place de : ${oldCh.name} — il garde sa date prévue et repassera normalement.` : '';
+  const oldCh = oldChapterId ? state.chapters.find(c=>c.id===oldChapterId) : null;
+  document.getElementById('chapterSwapTitle').textContent = oldCh ? 'Remplacer ce chapitre' : 'Ajouter un chapitre';
+  document.getElementById('chapterSwapSub').textContent = oldCh
+    ? `À la place de : ${oldCh.name} — il garde sa date prévue et repassera normalement.`
+    : "Choisis un chapitre à ajouter à ton planning du jour.";
+  document.getElementById('chapterSwapConfirm').textContent = oldCh ? 'Remplacer' : 'Ajouter';
   const sel = document.getElementById('chapterSwapSelect');
   sel.innerHTML = '';
   for(const subj of state.config.subjects){
