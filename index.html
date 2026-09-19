@@ -127,6 +127,8 @@ main{flex:1;max-width:1180px;width:100%;margin:0 auto;padding:24px 24px 90px}
 .plan-item .reason{font-size:11px;color:var(--ink-muted);font-style:italic;margin-top:3px}
 .plan-item .chip{margin-left:auto;flex:0 0 auto}
 .plan-item button{border:1px solid var(--accent);color:var(--accent-ink);background:var(--accent);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.plan-item button.swap-btn{background:var(--surface);color:var(--ink-muted);border-color:var(--border);padding:6px}
+.plan-item button.swap-btn:hover{border-color:var(--accent);color:var(--accent)}
 .plan-empty{color:var(--ink-muted);font-size:13px;padding:8px 0}
 
 .week-grid{display:grid;gap:10px}
@@ -555,6 +557,21 @@ input[type=date], input[type=number], input[type=text]{font-family:inherit;font-
     <div id="eloThresholdsList" style="max-height:50vh;overflow-y:auto"></div>
     <div class="modal-actions">
       <button class="btn-solid" id="eloThresholdsCloseBtn">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="chapterSwapBackdrop" hidden>
+  <div class="modal" style="max-width:380px">
+    <h3>Remplacer ce chapitre</h3>
+    <p class="sub" id="chapterSwapSub"></p>
+    <div class="field">
+      <label>Chapitre à faire à la place</label>
+      <select id="chapterSwapSelect"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="chapterSwapCancel">Annuler</button>
+      <button class="btn-solid" id="chapterSwapConfirm">Remplacer</button>
     </div>
   </div>
 </div>
@@ -1100,6 +1117,12 @@ async function setDailyDoc(dateStr, data){
   state.daily[dateStr] = data;
   await setDoc(doc(fs,'users',currentUid,'daily',dateStr), data);
 }
+async function introduceChapterIfNeeded(ch, dateStr){
+  if(!ch.srs){
+    ch.srs = {ease:EASE_DEFAULT, intervalDays:null, nextDueDate:addDays(dateStr,INTRO_PLACEHOLDER_DAYS), lastReviewedAt:null, introducedAt:dateStr, consecutiveBad:0, struggling:false};
+    await saveChapter(ch);
+  }
+}
 async function persistDailyPlan(dateStr, plan, overrideSubjectId){
   let doc = await getDailyDoc(dateStr) || {date:dateStr};
   doc.plannedChapterIds = plan.items.map(c=>c.id);
@@ -1110,13 +1133,23 @@ async function persistDailyPlan(dateStr, plan, overrideSubjectId){
   doc.loggedChapterIds = doc.loggedChapterIds || [];
   doc.sessionXpSum = doc.sessionXpSum || 0;
   await setDailyDoc(dateStr, doc);
-  for(const ch of plan.items){
-    if(!ch.srs){
-      ch.srs = {ease:EASE_DEFAULT, intervalDays:null, nextDueDate:addDays(dateStr,INTRO_PLACEHOLDER_DAYS), lastReviewedAt:null, introducedAt:dateStr, consecutiveBad:0, struggling:false};
-      await saveChapter(ch);
-    }
-  }
+  for(const ch of plan.items){ await introduceChapterIfNeeded(ch, dateStr); }
   return doc;
+}
+async function substituteChapterInPlan(dateStr, oldChapterId, newChapterId){
+  if(oldChapterId===newChapterId) return;
+  const newCh = state.chapters.find(c=>c.id===newChapterId);
+  if(!newCh) return;
+  let doc = await getDailyDoc(dateStr) || {date:dateStr, plannedChapterIds:[], loggedChapterIds:[], sessionXpSum:0};
+  const ids = doc.plannedChapterIds || [];
+  const idx = ids.indexOf(oldChapterId);
+  if(idx>=0) ids[idx] = newChapterId; else ids.push(newChapterId);
+  doc.plannedChapterIds = Array.from(new Set(ids));
+  doc.reasons = doc.reasons || {};
+  delete doc.reasons[oldChapterId];
+  doc.reasons[newChapterId] = "Remplacement manuel : chapitre choisi directement, en dehors de la rotation de l'algo.";
+  await setDailyDoc(dateStr, doc);
+  await introduceChapterIfNeeded(newCh, dateStr);
 }
 async function ensurePlanPersisted(dateStr, plan, overrideSubjectId){
   const existing = await getDailyDoc(dateStr);
@@ -1502,6 +1535,7 @@ const ICON_MOON = '<svg viewBox="0 0 24 24"><path d="M20 14.2A8 8 0 1 1 9.8 4a6.
 const ICON_SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.2 2.2M16.8 16.8 19 19M19 5l-2.2 2.2M7.2 16.8 5 19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICON_WARN = '<svg viewBox="0 0 24 24" width="12" height="12"><path d="M12 4 21.5 20H2.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10v4.2M12 17v.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+const ICON_SWAP = '<svg viewBox="0 0 24 24"><path d="M4 8h13M13 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 16H7M11 12l-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 async function removeSubject(subjectId){
   const subj = state.config.subjects.find(s=>s.id===subjectId);
   if(!subj) return;
@@ -1615,9 +1649,11 @@ async function renderPlan(){
           ${reason?`<div class="reason">${escapeHtml(reason)}</div>`:''}
         </div>
         <span class="chip ${lvl.level}"><span class="dot ${lvl.level}"></span>${lvl.label}</span>
-        <button data-ch="${ch.id}">${done?'Refaire':'Logger'}</button>
+        <button class="icon-btn swap-btn" data-ch="${ch.id}" title="Remplacer ce chapitre">${ICON_SWAP}</button>
+        <button class="log-btn" data-ch="${ch.id}">${done?'Refaire':'Logger'}</button>
       `;
-      row.querySelector('button').onclick = ()=>openSessionModal(ch.id);
+      row.querySelector('.log-btn').onclick = ()=>openSessionModal(ch.id);
+      row.querySelector('.swap-btn').onclick = ()=>openChapterSwap(ch.id);
       list.appendChild(row);
     }
   }
@@ -2269,6 +2305,35 @@ function renderEloThresholds(){
 }
 document.getElementById('eloThresholdsBtn').onclick = ()=>{ renderEloThresholds(); document.getElementById('eloThresholdsBackdrop').hidden = false; };
 document.getElementById('eloThresholdsCloseBtn').onclick = ()=>{ document.getElementById('eloThresholdsBackdrop').hidden = true; };
+let chapterSwapOldId = null;
+function openChapterSwap(oldChapterId){
+  chapterSwapOldId = oldChapterId;
+  const oldCh = state.chapters.find(c=>c.id===oldChapterId);
+  document.getElementById('chapterSwapSub').textContent = oldCh ? `À la place de : ${oldCh.name} — il garde sa date prévue et repassera normalement.` : '';
+  const sel = document.getElementById('chapterSwapSelect');
+  sel.innerHTML = '';
+  for(const subj of state.config.subjects){
+    const chs = subjectChapters(subj.id).filter(c=>c.id!==oldChapterId);
+    if(!chs.length) continue;
+    const group = document.createElement('optgroup');
+    group.label = subj.name;
+    for(const ch of chs){
+      const opt = document.createElement('option');
+      opt.value = ch.id; opt.textContent = ch.name;
+      group.appendChild(opt);
+    }
+    sel.appendChild(group);
+  }
+  document.getElementById('chapterSwapBackdrop').hidden = false;
+}
+document.getElementById('chapterSwapCancel').onclick = ()=>{ document.getElementById('chapterSwapBackdrop').hidden = true; };
+document.getElementById('chapterSwapConfirm').onclick = async ()=>{
+  const sel = document.getElementById('chapterSwapSelect');
+  if(!sel.value) return;
+  await substituteChapterInPlan(todayStr(), chapterSwapOldId, sel.value);
+  document.getElementById('chapterSwapBackdrop').hidden = true;
+  render();
+};
 async function renderGoalPanel(){
   const el = document.getElementById('goalPanel');
   if(!el) return;
